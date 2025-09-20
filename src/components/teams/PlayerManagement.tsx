@@ -29,10 +29,20 @@ export function PlayerManagement({ teamId, teamName }: PlayerManagementProps) {
     setShowAddForm(false);
   };
 
+  const handleEditPlayerSuccess = () => {
+    setEditingPlayer(null);
+  };
+
   const handleEditPlayer = (player: Player) => {
     setEditingPlayer(player);
-    // For now, we'll just show an alert. In the future, we can implement an edit form
-    alert(`Edit functionality for ${player.firstName} ${player.lastNameInitial}. will be implemented in the next iteration.`);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPlayer(null);
+  };
+
+  const handleCancelAdd = () => {
+    setShowAddForm(false);
   };
 
   return (
@@ -44,7 +54,7 @@ export function PlayerManagement({ teamId, teamName }: PlayerManagementProps) {
           <p className="text-muted-foreground">Manage players for {teamName}</p>
         </div>
         
-        {!showAddForm && (
+        {!showAddForm && !editingPlayer && (
           <Button onClick={() => setShowAddForm(true)} className="flex items-center gap-2">
             <Plus className="h-4 w-4" />
             Add Player
@@ -57,15 +67,24 @@ export function PlayerManagement({ teamId, teamName }: PlayerManagementProps) {
         <PlayerForm
           teamId={teamId}
           onSuccess={handleAddPlayerSuccess}
-          onCancel={() => setShowAddForm(false)}
+          onCancel={handleCancelAdd}
         />
       )}
 
-      {/* Player List */}
-      <PlayerList
-        teamId={teamId}
-        onEditPlayer={handleEditPlayer}
-      />
+      {/* Edit Player Form */}
+      {editingPlayer && (
+        <PlayerForm
+          teamId={teamId}
+          player={editingPlayer}
+          onSuccess={handleEditPlayerSuccess}
+          onCancel={handleCancelEdit}
+        />
+      )}
+
+      {/* Player List - only show when not adding or editing */}
+      {!showAddForm && !editingPlayer && (
+        <PlayerList teamId={teamId} onEditPlayer={handleEditPlayer} />
+      )}
     </div>
   );
 }

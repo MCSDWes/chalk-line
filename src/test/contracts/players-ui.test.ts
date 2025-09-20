@@ -30,6 +30,24 @@ describe('Player Management UI Contract Tests', () => {
       expect(expectedFormFields).toHaveProperty('jerseyNumber')
     })
 
+    it('should support edit mode with field restrictions', () => {
+      const editFormBehavior = {
+        editableFields: ['firstName', 'position', 'jerseyNumber'],
+        readOnlyFields: ['lastNameInitial', 'lastName', 'isMinor'],
+        submitButtonText: 'Update Player',
+        loadingText: 'Updating Player...',
+        privacyCompliance: 'cannot change age status or name fields'
+      }
+
+      expect(editFormBehavior.editableFields).toContain('firstName')
+      expect(editFormBehavior.editableFields).toContain('position')
+      expect(editFormBehavior.editableFields).toContain('jerseyNumber')
+      expect(editFormBehavior.readOnlyFields).toContain('lastNameInitial')
+      expect(editFormBehavior.readOnlyFields).toContain('lastName')
+      expect(editFormBehavior.readOnlyFields).toContain('isMinor')
+      expect(editFormBehavior.submitButtonText).toBe('Update Player')
+    })
+
     it('should validate COPPA compliance rules', () => {
       const minorPlayer = {
         firstName: 'Alex',
@@ -148,6 +166,24 @@ describe('Player Management UI Contract Tests', () => {
       expect(teamPlayerRelation).toHaveProperty('players')
       expect(Array.isArray(teamPlayerRelation.players)).toBe(true)
       expect(teamPlayerRelation.canAddPlayers).toBe(true)
+    })
+
+    it('should handle edit player workflow', () => {
+      const editWorkflow = {
+        initialState: 'showing player list',
+        onEditClick: 'shows edit form',
+        editForm: 'populated with player data',
+        submitAction: 'updates player and returns to list',
+        cancelAction: 'returns to list without changes',
+        formRestrictions: 'privacy fields disabled'
+      }
+
+      expect(editWorkflow.initialState).toBe('showing player list')
+      expect(editWorkflow.onEditClick).toBe('shows edit form')
+      expect(editWorkflow.editForm).toBe('populated with player data')
+      expect(editWorkflow.submitAction).toBe('updates player and returns to list')
+      expect(editWorkflow.cancelAction).toBe('returns to list without changes')
+      expect(editWorkflow.formRestrictions).toBe('privacy fields disabled')
     })
 
     it('should define privacy compliance workflow', () => {

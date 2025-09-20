@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Edit } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '../ui/form';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
-import { usePlayers, VALID_POSITIONS, CreatePlayerData } from '../../hooks/usePlayers';
+import { usePlayers, VALID_POSITIONS, CreatePlayerData, UpdatePlayerData } from '../../hooks/usePlayers';
 import { Id } from '../../../convex/_generated/dataModel';
 
 const playerFormSchema = z.object({
@@ -22,15 +22,28 @@ const playerFormSchema = z.object({
 
 type PlayerFormData = z.infer<typeof playerFormSchema>;
 
+interface Player {
+  _id: Id<"players">;
+  firstName: string;
+  lastNameInitial: string;
+  lastName?: string;
+  isMinor: boolean;
+  position: string;
+  jerseyNumber?: number;
+  _creationTime: number;
+}
+
 interface PlayerFormProps {
   teamId: Id<"teams">;
+  player?: Player; // If provided, form is in edit mode
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
+export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { createPlayer } = usePlayers(teamId);
+  const { createPlayer, updatePlayer } = usePlayers(teamId);
+  const isEditMode = !!player;
 
   const form = useForm<PlayerFormData>({
     resolver: zodResolver(playerFormSchema),
@@ -44,36 +57,75 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
     },
   });
 
+  // Update form when player prop changes (for edit mode)
+  useEffect(() => {
+    if (player) {
+      form.reset({
+        firstName: player.firstName,
+        lastNameInitial: player.lastNameInitial,
+        lastName: player.lastName || '',
+        isMinor: player.isMinor,
+        position: player.position,
+        jerseyNumber: player.jerseyNumber,
+      });
+    } else {
+      form.reset({
+        firstName: '',
+        lastNameInitial: '',
+        lastName: '',
+        isMinor: true,
+        position: '',
+        jerseyNumber: undefined,
+      });
+    }
+  }, [player, form]);
+
   const isMinor = form.watch('isMinor');
 
   const onSubmit = async (data: PlayerFormData) => {
     try {
       setIsSubmitting(true);
       
-      const playerData: CreatePlayerData = {
-        firstName: data.firstName.trim(),
-        lastNameInitial: data.lastNameInitial.toUpperCase(),
-        isMinor: data.isMinor,
-        position: data.position,
-      };
+      if (isEditMode && player) {
+        // Edit mode: only update allowed fields
+        const updates: UpdatePlayerData = {
+          firstName: data.firstName.trim(),
+          position: data.position,
+        };
 
-      // Only include lastName for adults
-      if (!data.isMinor && data.lastName && data.lastName.trim()) {
-        playerData.lastName = data.lastName.trim();
+        // Include jersey number if provided
+        if (data.jerseyNumber !== undefined && data.jerseyNumber !== null) {
+          updates.jerseyNumber = data.jerseyNumber;
+        }
+
+        await updatePlayer(player._id, updates);
+      } else {
+        // Create mode: include all fields
+        const playerData: CreatePlayerData = {
+          firstName: data.firstName.trim(),
+          lastNameInitial: data.lastNameInitial.toUpperCase(),
+          isMinor: data.isMinor,
+          position: data.position,
+        };
+
+        // Only include lastName for adults
+        if (!data.isMinor && data.lastName && data.lastName.trim()) {
+          playerData.lastName = data.lastName.trim();
+        }
+
+        // Only include jersey number if provided
+        if (data.jerseyNumber !== undefined && data.jerseyNumber !== null) {
+          playerData.jerseyNumber = data.jerseyNumber;
+        }
+
+        await createPlayer(playerData);
       }
-
-      // Only include jersey number if provided
-      if (data.jerseyNumber !== undefined && data.jerseyNumber !== null) {
-        playerData.jerseyNumber = data.jerseyNumber;
-      }
-
-      await createPlayer(playerData);
       
       form.reset();
       onSuccess?.();
     } catch (error) {
-      console.error('Failed to create player:', error);
-      alert(`Failed to create player: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`Failed to ${isEditMode ? 'update' : 'create'} player:`, error);
+      alert(`Failed to ${isEditMode ? 'update' : 'create'} player: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -84,8 +136,17 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Add New Player
+            {isEditMode ? (
+              <>
+                <Edit className="h-5 w-5" />
+                Edit Player
+              </>
+            ) : (
+              <>
+                <Plus className="h-5 w-5" />
+                Add New Player
+              </>
+            )}
           </span>
           {onCancel && (
             <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -109,36 +170,47 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
               </p>
             </div>
 
-            {/* Minor Status */}
+            {/* Minor Status - Disabled in edit mode */}
             <FormField
               control={form.control}
               name="isMinor"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Player Age Status</FormLabel>
-                  <FormControl>
-                    <div className="flex gap-4">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={field.value === true}
-                          onChange={() => field.onChange(true)}
-                          className="text-blue-600"
-                        />
-                        <span>Minor (Under 13)</span>
-                        <Badge variant="secondary" className="text-xs">Privacy Protected</Badge>
-                      </label>
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          checked={field.value === false}
-                          onChange={() => field.onChange(false)}
-                          className="text-blue-600"
-                        />
-                        <span>Adult (13+)</span>
-                      </label>
+                  {isEditMode ? (
+                    <div className="p-2 bg-gray-50 border rounded-md">
+                      <Badge variant={field.value ? "secondary" : "outline"} className="text-xs">
+                        {field.value ? "Minor (Under 13) - Privacy Protected" : "Adult (13+)"}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Age status cannot be changed after creation for privacy compliance.
+                      </p>
                     </div>
-                  </FormControl>
+                  ) : (
+                    <FormControl>
+                      <div className="flex gap-4">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            checked={field.value === true}
+                            onChange={() => field.onChange(true)}
+                            className="text-blue-600"
+                          />
+                          <span>Minor (Under 13)</span>
+                          <Badge variant="secondary" className="text-xs">Privacy Protected</Badge>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            checked={field.value === false}
+                            onChange={() => field.onChange(false)}
+                            className="text-blue-600"
+                          />
+                          <span>Adult (13+)</span>
+                        </label>
+                      </div>
+                    </FormControl>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -160,7 +232,7 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
                 )}
               />
 
-              {/* Last Name Initial */}
+              {/* Last Name Initial - Disabled in edit mode */}
               <FormField
                 control={form.control}
                 name="lastNameInitial"
@@ -172,17 +244,23 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
                         placeholder="e.g., J" 
                         maxLength={1}
                         className="text-center font-mono text-lg"
+                        disabled={isEditMode}
                         {...field} 
                       />
                     </FormControl>
-                    <FormDescription>Single letter only</FormDescription>
+                    <FormDescription>
+                      {isEditMode 
+                        ? "Name initial cannot be changed for privacy compliance" 
+                        : "Single letter only"
+                      }
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
 
-            {/* Full Last Name (Adults Only) */}
+            {/* Full Last Name (Adults Only) - Disabled in edit mode */}
             {!isMinor && (
               <FormField
                 control={form.control}
@@ -191,10 +269,17 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
                   <FormItem>
                     <FormLabel>Full Last Name (Optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Johnson" {...field} />
+                      <Input 
+                        placeholder="e.g., Johnson" 
+                        disabled={isEditMode}
+                        {...field} 
+                      />
                     </FormControl>
                     <FormDescription>
-                      Available for adults only. Leave blank to use initial only.
+                      {isEditMode 
+                        ? "Last name cannot be changed for privacy compliance"
+                        : "Available for adults only. Leave blank to use initial only."
+                      }
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -258,7 +343,10 @@ export function PlayerForm({ teamId, onSuccess, onCancel }: PlayerFormProps) {
                 </Button>
               )}
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Adding Player...' : 'Add Player'}
+                {isSubmitting 
+                  ? (isEditMode ? 'Updating Player...' : 'Adding Player...') 
+                  : (isEditMode ? 'Update Player' : 'Add Player')
+                }
               </Button>
             </div>
           </form>
