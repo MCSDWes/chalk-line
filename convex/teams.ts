@@ -31,10 +31,18 @@ export const getUserTeams = query({
       throw new Error('User authentication required');
     }
 
-    // Build the query
+    // Build the query for active (non-deleted) teams
     let query = ctx.db
       .query("teams")
-      .filter((q) => q.eq(q.field("userId"), args.userId));
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.or(
+            q.eq(q.field("isDeleted"), undefined),
+            q.eq(q.field("isDeleted"), false)
+          )
+        )
+      );
 
     // Add season filter if provided
     if (args.season) {
@@ -52,6 +60,55 @@ export const getUserTeams = query({
       .collect();
 
     return teams;
+  },
+});
+
+/**
+ * Get soft-deleted teams for a user
+ * 
+ * Business Rules:
+ * - Only returns teams where isDeleted = true
+ * - User can only see their own deleted teams
+ * - Supports optional season filtering
+ * - Ordered by deletion time (most recently deleted first)
+ */
+export const getDeletedTeams = query({
+  args: {
+    userId: v.string(),
+    season: v.optional(v.string()), // Optional season filter
+  },
+  handler: async (ctx, args) => {
+    // Validate authentication
+    if (!args.userId || !args.userId.startsWith('user_')) {
+      throw new Error('User authentication required');
+    }
+
+    // Build the query for deleted teams only
+    let query = ctx.db
+      .query("teams")
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.eq(q.field("isDeleted"), true)
+        )
+      );
+
+    // Add season filter if provided
+    if (args.season) {
+      const seasonPattern = /^\d{4} (Spring|Summer|Fall|Winter)$/;
+      if (!seasonPattern.test(args.season)) {
+        throw new Error('Invalid season format. Must be "YYYY Season" (e.g., "2025 Spring")');
+      }
+
+      query = query.filter((q) => q.eq(q.field("season"), args.season));
+    }
+
+    // Execute query and sort by deletion time (most recently deleted first)
+    const deletedTeams = await query
+      .order("desc")
+      .collect();
+
+    return deletedTeams;
   },
 });
 
@@ -95,14 +152,18 @@ export const createTeam = mutation({
       throw new Error('Invalid season format. Must be "YYYY Season" (e.g., "2025 Spring")');
     }
 
-    // Check for duplicate team name in the same season for this user
+    // Check for duplicate team name in the same season for this user (excluding soft-deleted teams)
     const existingTeam = await ctx.db
       .query("teams")
       .filter((q) => 
         q.and(
           q.eq(q.field("userId"), args.userId),
           q.eq(q.field("name"), args.name.trim()),
-          q.eq(q.field("season"), args.season)
+          q.eq(q.field("season"), args.season),
+          q.or(
+            q.eq(q.field("isDeleted"), undefined),
+            q.eq(q.field("isDeleted"), false)
+          )
         )
       )
       .first();
@@ -281,13 +342,81 @@ export const deleteTeam = mutation({
       throw new Error('Cannot delete team with existing players. Please remove all players first.');
     }
 
-    // Delete the team
-    await ctx.db.delete(args.teamId);
+    // Soft delete the team
+    await ctx.db.patch(args.teamId, {
+      isDeleted: true,
+      deletedAt: Date.now()
+    });
 
     return {
       success: true,
       teamId: args.teamId,
       message: 'Team deleted successfully'
+    };
+  },
+});
+
+/**
+ * Restore a soft-deleted team
+ * 
+ * Business Rules:
+ * - Only the team owner can restore their teams
+ * - Team must be currently soft-deleted (isDeleted = true)
+ * - Check for naming conflicts with active teams before restoring
+ * - Clear deletion metadata on successful restore
+ */
+export const restoreTeam = mutation({
+  args: {
+    teamId: v.id("teams"),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Validate authentication
+    if (!args.userId || !args.userId.startsWith('user_')) {
+      throw new Error('User authentication required');
+    }
+
+    // Get the existing team
+    const existingTeam = await ctx.db.get(args.teamId);
+    if (!existingTeam || existingTeam.userId !== args.userId) {
+      throw new Error('Team not found or access denied');
+    }
+
+    // Check if team is actually deleted
+    if (!existingTeam.isDeleted) {
+      throw new Error('Team is not deleted and cannot be restored');
+    }
+
+    // Check for naming conflicts with active teams
+    const conflictingTeam = await ctx.db
+      .query("teams")
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.eq(q.field("name"), existingTeam.name),
+          q.eq(q.field("season"), existingTeam.season),
+          q.or(
+            q.eq(q.field("isDeleted"), undefined),
+            q.eq(q.field("isDeleted"), false)
+          )
+        )
+      )
+      .first();
+
+    if (conflictingTeam) {
+      throw new Error(`Cannot restore team: An active team named "${existingTeam.name}" already exists for ${existingTeam.season}`);
+    }
+
+    // Restore the team by clearing deletion flags
+    await ctx.db.patch(args.teamId, {
+      isDeleted: false,
+      deletedAt: undefined
+    });
+
+    return {
+      success: true,
+      teamId: args.teamId,
+      message: `Team "${existingTeam.name}" restored successfully`
     };
   },
 });

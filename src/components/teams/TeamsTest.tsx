@@ -1,4 +1,5 @@
 import { TeamList } from './TeamList';
+import { DeletedTeamsList } from './DeletedTeamsList';
 import { useAuth } from '../../hooks/useAuth';
 
 export function TeamsTest() {
@@ -18,6 +19,7 @@ export function TeamsTest() {
   return (
     <div className="container mx-auto px-4 py-6">
       <TeamList />
+      <DeletedTeamsList />
     </div>
   );
 }

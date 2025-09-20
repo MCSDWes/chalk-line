@@ -12,9 +12,15 @@ export function useTeams() {
     userId ? { userId } : "skip"
   );
 
+  const deletedTeams = useQuery(
+    api.teams.getDeletedTeams,
+    userId ? { userId } : "skip"
+  );
+
   const createTeamMutation = useMutation(api.teams.createTeam);
   const updateTeamMutation = useMutation(api.teams.updateTeam);
   const deleteTeamMutation = useMutation(api.teams.deleteTeam);
+  const restoreTeamMutation = useMutation(api.teams.restoreTeam);
 
   const createTeam = async (name: string, season: string) => {
     if (!userId) {
@@ -51,11 +57,24 @@ export function useTeams() {
     });
   };
 
+  const restoreTeam = async (teamId: Id<"teams">) => {
+    if (!userId) {
+      throw new Error("User must be authenticated");
+    }
+    
+    return await restoreTeamMutation({
+      teamId,
+      userId,
+    });
+  };
+
   return {
     teams,
+    deletedTeams,
     createTeam,
     updateTeam,
     deleteTeam,
+    restoreTeam,
     isLoading: teams === undefined && userId !== undefined,
   };
 }

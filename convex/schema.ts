@@ -21,8 +21,11 @@ export default defineSchema({
     userId: v.string(), // Clerk user ID
     name: v.string(),   // Team name (e.g., "Eagles")
     season: v.string(), // Season identifier (e.g., "2025 Spring")
+    isDeleted: v.optional(v.boolean()), // Soft delete flag
+    deletedAt: v.optional(v.number()),  // Deletion timestamp
   })
     .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "isDeleted"]) // Active teams only
     .index("by_user_name_season", ["userId", "name", "season"]), // Unique constraint
 
   // Players - privacy-compliant player entities

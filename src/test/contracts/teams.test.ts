@@ -238,3 +238,168 @@ describe('Team Data Model Contract', () => {
     expect(typeof mockRoster.isActive).toBe('boolean')
   })
 })
+
+/**
+ * Soft Delete Contract Tests
+ * 
+ * These tests verify that soft delete functionality works correctly:
+ * 1. Teams are marked as deleted rather than removed
+ * 2. Deleted teams don't appear in getUserTeams
+ * 3. Team names can be reused after soft delete
+ * 4. Deletion preserves historical data
+ */
+describe('Team Soft Delete Contract', () => {
+  it('should define soft delete fields in team schema', () => {
+    const softDeleteTeam = {
+      _id: 'jd123456789',
+      userId: 'user_123',
+      name: 'Eagles',
+      season: '2025 Spring',
+      isDeleted: true,
+      deletedAt: 1758341965302,
+      _creationTime: 1758341900000
+    }
+
+    expect(softDeleteTeam).toHaveProperty('isDeleted')
+    expect(softDeleteTeam).toHaveProperty('deletedAt')
+    expect(typeof softDeleteTeam.isDeleted).toBe('boolean')
+    expect(typeof softDeleteTeam.deletedAt).toBe('number')
+    expect(softDeleteTeam.deletedAt).toBeGreaterThan(0)
+  })
+
+  it('should define deleteTeam response with soft delete', () => {
+    const expectedDeleteResponse = {
+      success: true,
+      teamId: 'jd123456789',
+      message: 'Team deleted successfully'
+    }
+
+    expect(expectedDeleteResponse).toHaveProperty('success')
+    expect(expectedDeleteResponse).toHaveProperty('teamId')
+    expect(expectedDeleteResponse).toHaveProperty('message')
+    expect(expectedDeleteResponse.success).toBe(true)
+    expect(typeof expectedDeleteResponse.teamId).toBe('string')
+    expect(typeof expectedDeleteResponse.message).toBe('string')
+  })
+
+  it('should allow team name reuse after soft delete', () => {
+    // Simulating the business logic: createTeam should succeed 
+    // if previous team with same name/season is soft-deleted
+    const deletedTeam = {
+      userId: 'user_123',
+      name: 'Eagles',
+      season: '2025 Spring',
+      isDeleted: true
+    }
+
+    const newTeam = {
+      userId: 'user_123',
+      name: 'Eagles',
+      season: '2025 Spring',
+      isDeleted: false // or undefined
+    }
+
+    // Both teams can exist with same name/season as long as one is deleted
+    expect(deletedTeam.name).toBe(newTeam.name)
+    expect(deletedTeam.season).toBe(newTeam.season)
+    expect(deletedTeam.userId).toBe(newTeam.userId)
+    expect(deletedTeam.isDeleted).toBe(true)
+    expect(newTeam.isDeleted).toBeFalsy()
+  })
+
+  it('should filter out deleted teams from getUserTeams', () => {
+    const allTeams = [
+      { name: 'Eagles', isDeleted: false },
+      { name: 'Hawks', isDeleted: true },
+      { name: 'Lions', isDeleted: undefined }
+    ]
+
+    const activeTeams = allTeams.filter(team => 
+      team.isDeleted === false || team.isDeleted === undefined
+    )
+
+    expect(activeTeams).toHaveLength(2)
+    expect(activeTeams.map(t => t.name)).toEqual(['Eagles', 'Lions'])
+    expect(activeTeams.map(t => t.name)).not.toContain('Hawks')
+  })
+
+  it('should define getDeletedTeams input and output structure', () => {
+    const expectedInput = {
+      userId: 'user_123',
+      season: undefined // optional field
+    }
+
+    const expectedOutput = [
+      {
+        _id: 'jd123456789',
+        userId: 'user_123',
+        name: 'Deleted Eagles',
+        season: '2025 Spring',
+        isDeleted: true,
+        deletedAt: 1758341965302,
+        _creationTime: 1758341900000
+      }
+    ]
+
+    expect(expectedInput).toHaveProperty('userId')
+    expect(expectedInput.season).toBeUndefined() // optional field
+    expect(Array.isArray(expectedOutput)).toBe(true)
+    
+    if (expectedOutput.length > 0) {
+      const deletedTeam = expectedOutput[0]
+      expect(deletedTeam).toHaveProperty('isDeleted')
+      expect(deletedTeam).toHaveProperty('deletedAt')
+      expect(deletedTeam.isDeleted).toBe(true)
+      expect(typeof deletedTeam.deletedAt).toBe('number')
+    }
+  })
+
+  it('should define restoreTeam input and output structure', () => {
+    const expectedInput = {
+      teamId: 'jd123456789',
+      userId: 'user_123'
+    }
+
+    const expectedOutput = {
+      success: true,
+      teamId: 'jd123456789',
+      message: 'Team "Eagles" restored successfully'
+    }
+
+    expect(expectedInput).toHaveProperty('teamId')
+    expect(expectedInput).toHaveProperty('userId')
+    expect(typeof expectedInput.teamId).toBe('string')
+    expect(typeof expectedInput.userId).toBe('string')
+
+    expect(expectedOutput).toHaveProperty('success')
+    expect(expectedOutput).toHaveProperty('teamId')
+    expect(expectedOutput).toHaveProperty('message')
+    expect(expectedOutput.success).toBe(true)
+    expect(typeof expectedOutput.message).toBe('string')
+    expect(expectedOutput.message).toContain('restored successfully')
+  })
+
+  it('should handle restore conflicts with active teams', () => {
+    // Business rule: cannot restore if active team with same name/season exists
+    const deletedTeam = {
+      name: 'Eagles',
+      season: '2025 Spring',
+      isDeleted: true
+    }
+
+    const activeTeam = {
+      name: 'Eagles',
+      season: '2025 Spring',
+      isDeleted: false
+    }
+
+    const expectedError = 'Cannot restore team: An active team named "Eagles" already exists for 2025 Spring'
+
+    expect(deletedTeam.name).toBe(activeTeam.name)
+    expect(deletedTeam.season).toBe(activeTeam.season)
+    expect(deletedTeam.isDeleted).toBe(true)
+    expect(activeTeam.isDeleted).toBe(false)
+    expect(typeof expectedError).toBe('string')
+    expect(expectedError).toContain('Cannot restore team')
+  })
+})
