@@ -13,10 +13,12 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as games from "../games.js";
 import type * as http from "../http.js";
+import type * as lineups from "../lineups.js";
 import type * as players from "../players.js";
-import type * as rosters from "../rosters.js";
 import type * as teams from "../teams.js";
+import type * as teams_manual_auth from "../teams_manual_auth.js";
 import type * as test from "../test.js";
 
 /**
@@ -28,10 +30,12 @@ import type * as test from "../test.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  games: typeof games;
   http: typeof http;
+  lineups: typeof lineups;
   players: typeof players;
-  rosters: typeof rosters;
   teams: typeof teams;
+  teams_manual_auth: typeof teams_manual_auth;
   test: typeof test;
 }>;
 export declare const api: FilterApi<

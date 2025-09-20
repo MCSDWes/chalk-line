@@ -17,7 +17,7 @@ const playerFormSchema = z.object({
   lastName: z.string().max(50, 'Last name too long').optional(),
   isMinor: z.boolean(),
   position: z.string().min(1, 'Position is required'),
-  jerseyNumber: z.coerce.number().min(0, 'Jersey number must be 0 or higher').max(99, 'Jersey number must be 99 or lower').optional(),
+  jerseyNumber: z.union([z.string(), z.number()]).optional(), // Accept both string and number
 });
 
 type PlayerFormData = z.infer<typeof playerFormSchema>;
@@ -53,7 +53,7 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
       lastName: '',
       isMinor: true,
       position: '',
-      jerseyNumber: undefined,
+      jerseyNumber: '' as any, // Initialize as empty string instead of undefined
     },
   });
 
@@ -66,7 +66,7 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
         lastName: player.lastName || '',
         isMinor: player.isMinor,
         position: player.position,
-        jerseyNumber: player.jerseyNumber,
+        jerseyNumber: player.jerseyNumber?.toString() || '', // Convert to string or empty string
       });
     } else {
       form.reset({
@@ -75,7 +75,7 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
         lastName: '',
         isMinor: true,
         position: '',
-        jerseyNumber: undefined,
+        jerseyNumber: '', // Use empty string instead of undefined
       });
     }
   }, [player, form]);
@@ -86,6 +86,11 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
     try {
       setIsSubmitting(true);
       
+      // Convert jersey number from string to number if provided
+      const jerseyNumber = data.jerseyNumber && data.jerseyNumber.toString().trim() 
+        ? parseInt(data.jerseyNumber.toString(), 10) 
+        : undefined;
+      
       if (isEditMode && player) {
         // Edit mode: only update allowed fields
         const updates: UpdatePlayerData = {
@@ -94,8 +99,8 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
         };
 
         // Include jersey number if provided
-        if (data.jerseyNumber !== undefined && data.jerseyNumber !== null) {
-          updates.jerseyNumber = data.jerseyNumber;
+        if (jerseyNumber !== undefined && !isNaN(jerseyNumber)) {
+          updates.jerseyNumber = jerseyNumber;
         }
 
         await updatePlayer(player._id, updates);
@@ -114,8 +119,8 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
         }
 
         // Only include jersey number if provided
-        if (data.jerseyNumber !== undefined && data.jerseyNumber !== null) {
-          playerData.jerseyNumber = data.jerseyNumber;
+        if (jerseyNumber !== undefined && !isNaN(jerseyNumber)) {
+          playerData.jerseyNumber = jerseyNumber;
         }
 
         await createPlayer(playerData);
@@ -326,7 +331,8 @@ export function PlayerForm({ teamId, player, onSuccess, onCancel }: PlayerFormPr
                         min="0" 
                         max="99" 
                         placeholder="e.g., 23"
-                        {...field} 
+                        value={field.value || ''} // Ensure controlled value
+                        onChange={(e) => field.onChange(e.target.value || '')} // Handle empty string
                       />
                     </FormControl>
                     <FormDescription>0-99, leave blank for coaches</FormDescription>

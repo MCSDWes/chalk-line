@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { ArrowLeft, Users, Calendar, Settings, ClipboardList } from "lucide-react";
+import { ArrowLeft, Users, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PlayerManagement } from "./PlayerManagement";
-import { RosterManagement } from "./RosterManagement";
 import { Id } from "../../../convex/_generated/dataModel";
 
 interface Team {
@@ -21,7 +20,7 @@ interface TeamDetailViewProps {
 }
 
 export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<'players' | 'rosters' | 'settings'>('players');
+  const [activeTab, setActiveTab] = useState<'players' | 'settings'>('players');
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('en-US', {
@@ -53,8 +52,7 @@ export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
             <div>
               <CardTitle className="text-2xl">{team.name}</CardTitle>
               <div className="flex items-center gap-4 mt-2">
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
+                <Badge variant="outline">
                   {team.season}
                 </Badge>
                 <span className="text-sm text-muted-foreground">
@@ -77,14 +75,6 @@ export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
           Players
         </Button>
         <Button
-          variant={activeTab === 'rosters' ? 'default' : 'outline'}
-          onClick={() => setActiveTab('rosters')}
-          className="flex items-center gap-2"
-        >
-          <ClipboardList className="h-4 w-4" />
-          Rosters
-        </Button>
-        <Button
           variant={activeTab === 'settings' ? 'default' : 'outline'}
           onClick={() => setActiveTab('settings')}
           className="flex items-center gap-2"
@@ -99,19 +89,25 @@ export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
         <PlayerManagement teamId={team._id} teamName={team.name} />
       )}
 
-      {activeTab === 'rosters' && (
-        <RosterManagement teamId={team._id} teamName={team.name} />
-      )}
-
       {activeTab === 'settings' && (
         <Card>
           <CardHeader>
             <CardTitle>Team Settings</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">
-              Team settings and configuration options will be available in a future update.
-            </p>
+            <div className="space-y-4">
+              <p className="text-muted-foreground">
+                Team settings and configuration options will be available in a future update.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-blue-800 mb-2">
+                  📝 Lineups are now managed per game
+                </h4>
+                <p className="text-sm text-blue-700">
+                  Team lineups are now created when you schedule games. Go to the Games tab to create games and set lineups.
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

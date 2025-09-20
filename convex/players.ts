@@ -302,9 +302,9 @@ export const removePlayer = mutation({
       throw new Error('Access denied');
     }
 
-    // Check if player is in any rosters
-    const playerInRoster = await ctx.db
-      .query("rosters")
+    // Check if player is in any lineups
+    const playerInLineup = await ctx.db
+      .query("lineups")
       .filter((q) => 
         q.and(
           q.eq(q.field("teamId"), existingPlayer.teamId),
@@ -314,8 +314,8 @@ export const removePlayer = mutation({
       )
       .first();
 
-    // For now, we'll allow deletion but in a real app you'd want to check roster membership
-    // if (playerInRoster) {
+    // For now, we'll allow deletion but in a real app you'd want to check lineup membership
+    // if (playerInLineup) {
     //   throw new Error('Cannot remove player with active game records');
     // }
 

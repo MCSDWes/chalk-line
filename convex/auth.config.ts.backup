@@ -1,0 +1,14 @@
+import { convexAuth } from "@convex-dev/auth/server";
+
+export const { auth, signIn, signOut, store } = convexAuth({
+  providers: [],
+});
+
+// Helper to get authenticated user ID from Convex auth
+export async function getCurrentUserId(ctx: any): Promise<string> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Authentication required");
+  }
+  return identity.subject;
+}

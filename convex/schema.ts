@@ -46,15 +46,135 @@ export default defineSchema({
     .index("by_team_jersey", ["teamId", "jerseyNumber"]) // Jersey uniqueness
     .index("by_firstName_initial", ["firstName", "lastNameInitial"]),
 
-  // Rosters - game-specific player groupings
-  rosters: defineTable({
-    teamId: v.id("teams"),
-    name: v.string(),                 // Roster name (e.g., "Starting Lineup")
-    gameDate: v.string(),             // Game date (YYYY-MM-DD format)
-    playerIds: v.array(v.id("players")), // Array of player IDs
-    isActive: v.boolean(),            // Current active status
+  // Lineups - game-specific batting orders and field positions
+  lineups: defineTable({
+    gameId: v.id("games"),            // Game this lineup is for
+    teamId: v.id("teams"),            // Team this lineup belongs to
+    isHomeTeam: v.boolean(),          // Whether this is home or away team lineup
+    battingOrder: v.array(v.object({
+      playerId: v.id("players"),      // Player in this batting position
+      battingPosition: v.number(),    // Batting order position (1-9+)
+      fieldPosition: Position,        // Field position (P, C, 1B, etc.)
+    })),
+    substitutes: v.optional(v.array(v.object({
+      playerId: v.id("players"),      // Substitute player
+      availablePositions: v.array(Position), // Positions they can play
+    }))),
+    createdAt: v.number(),            // When lineup was created
+    isActive: v.boolean(),            // Whether this lineup is currently active
   })
-    .index("by_team", ["teamId"])
-    .index("by_team_date", ["teamId", "gameDate"])
-    .index("by_team_active", ["teamId", "isActive"]),
+    .index("by_game", ["gameId"])
+    .index("by_game_team", ["gameId", "teamId"])
+    .index("by_team", ["teamId"]),
+
+  // Games - individual baseball games
+  games: defineTable({
+    userId: v.string(),               // Clerk user ID (game creator/scorekeeper)
+    homeTeamId: v.id("teams"),        // Home team
+    homeTeamName: v.optional(v.string()), // Home team name (for UI display) - temporarily optional for migration
+    awayTeamId: v.optional(v.id("teams")), // Away team (optional for external teams)
+    awayTeamName: v.optional(v.string()), // Name for external teams
+    gameDate: v.string(),             // Game date (YYYY-MM-DD)
+    gameTime: v.optional(v.string()), // Game time (HH:MM)
+    field: v.optional(v.string()),    // Field/venue name
+    season: v.string(),               // Season identifier
+    gameType: v.union(
+      v.literal("regular"),           // Regular season
+      v.literal("playoff"),           // Playoff game
+      v.literal("championship"),      // Championship game
+      v.literal("scrimmage"),         // Practice game
+      v.literal("tournament")         // Tournament game
+    ),
+    status: v.union(
+      v.literal("scheduled"),         // Game scheduled but not started
+      v.literal("in_progress"),       // Game currently being played
+      v.literal("completed"),         // Game finished
+      v.literal("suspended"),         // Game temporarily stopped
+      v.literal("cancelled")          // Game cancelled
+    ),
+    currentInning: v.optional(v.number()), // Current inning (1-9+)
+    currentHalf: v.optional(v.union(
+      v.literal("top"),               // Top of inning (away team batting)
+      v.literal("bottom")             // Bottom of inning (home team batting)
+    )),
+    homeScore: v.optional(v.number()), // Current home team score
+    awayScore: v.optional(v.number()), // Current away team score
+    startedAt: v.optional(v.number()), // Game start timestamp
+    completedAt: v.optional(v.number()), // Game completion timestamp
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_date", ["userId", "gameDate"])
+    .index("by_home_team", ["homeTeamId"])
+    .index("by_season", ["season"])
+    .index("by_status", ["status"]),
+
+  // Innings - track scoring by inning
+  innings: defineTable({
+    gameId: v.id("games"),
+    inningNumber: v.number(),         // Inning number (1-9+)
+    homeRuns: v.number(),             // Runs scored by home team this inning
+    awayRuns: v.number(),             // Runs scored by away team this inning
+    homeHits: v.optional(v.number()), // Hits by home team this inning
+    awayHits: v.optional(v.number()), // Hits by away team this inning
+    homeErrors: v.optional(v.number()), // Errors by home team this inning
+    awayErrors: v.optional(v.number()), // Errors by away team this inning
+    isComplete: v.boolean(),          // Whether inning is finished
+  })
+    .index("by_game", ["gameId"])
+    .index("by_game_inning", ["gameId", "inningNumber"]),
+
+  // At-Bats - individual batting events
+  atBats: defineTable({
+    gameId: v.id("games"),
+    playerId: v.id("players"),
+    inningNumber: v.number(),
+    battingOrder: v.number(),         // Position in batting order (1-9+)
+    isHomeTeam: v.boolean(),          // Whether batter is on home team
+    result: v.union(
+      v.literal("single"),            // Base hit - single
+      v.literal("double"),            // Base hit - double
+      v.literal("triple"),            // Base hit - triple
+      v.literal("home_run"),          // Home run
+      v.literal("walk"),              // Base on balls (walk)
+      v.literal("strikeout"),         // Strikeout
+      v.literal("groundout"),         // Ground ball out
+      v.literal("flyout"),            // Fly ball out
+      v.literal("foul_out"),          // Foul ball out
+      v.literal("hit_by_pitch"),      // Hit by pitch
+      v.literal("sacrifice_fly"),     // Sacrifice fly
+      v.literal("sacrifice_bunt"),    // Sacrifice bunt
+      v.literal("fielders_choice"),   // Fielder's choice
+      v.literal("error"),             // Reached on error
+      v.literal("interference")       // Catcher/umpire interference
+    ),
+    rbis: v.number(),                 // Runs batted in
+    runsScored: v.number(),           // Runs scored by this batter
+    pitchCount: v.optional(v.number()), // Total pitches faced
+    strikes: v.optional(v.number()),   // Strikes in at-bat
+    balls: v.optional(v.number()),     // Balls in at-bat
+    timestamp: v.number(),            // When at-bat occurred
+  })
+    .index("by_game", ["gameId"])
+    .index("by_game_inning", ["gameId", "inningNumber"])
+    .index("by_player", ["playerId"])
+    .index("by_game_player", ["gameId", "playerId"]),
+
+  // Game State - track current game progress
+  gameState: defineTable({
+    gameId: v.id("games"),
+    currentBatter: v.optional(v.id("players")), // Current batter
+    battingOrder: v.array(v.id("players")), // Home team batting order
+    awayBattingOrder: v.optional(v.array(v.string())), // Away team batting order (player names for external teams)
+    currentBatterIndex: v.number(),    // Index in batting order
+    baseRunners: v.object({           // Current base runners
+      first: v.optional(v.id("players")),
+      second: v.optional(v.id("players")),
+      third: v.optional(v.id("players"))
+    }),
+    outs: v.number(),                 // Current outs in inning (0-3)
+    balls: v.number(),                // Current ball count (0-4)
+    strikes: v.number(),              // Current strike count (0-3)
+    lastUpdated: v.number(),          // Last update timestamp
+  })
+    .index("by_game", ["gameId"]),
 });

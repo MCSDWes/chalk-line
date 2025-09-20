@@ -72,7 +72,7 @@ export function TeamList({ selectedTeam, onTeamSelect }: TeamListProps) {
         <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">No teams yet</h3>
         <p className="text-gray-600 mb-6">
-          Get started by creating your first team. You can manage players and rosters once you have a team set up.
+          Get started by creating your first team. You can manage players once you have a team set up. Lineups are created when you schedule games.
         </p>
         <TeamForm 
           trigger={
@@ -140,7 +140,7 @@ export function TeamList({ selectedTeam, onTeamSelect }: TeamListProps) {
                       <DialogHeader>
                         <DialogTitle>Delete Team</DialogTitle>
                         <DialogDescription>
-                          Are you sure you want to delete "{team.name}"? This action cannot be undone and will also delete all players and rosters associated with this team.
+                          Are you sure you want to delete "{team.name}"? This action cannot be undone and will also delete all players associated with this team.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="flex justify-end space-x-2">

@@ -1,110 +1,27 @@
-import { useMutation, useQuery } from "convex/react";
-import { useAuth } from "./useAuth";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
 export function useTeams() {
-  const { user } = useAuth();
-  const userId = user?.id;
-
-  const teams = useQuery(
-    api.teams.getUserTeams,
-    userId ? { userId } : "skip"
-  );
-
-  const deletedTeams = useQuery(
-    api.teams.getDeletedTeams,
-    userId ? { userId } : "skip"
-  );
-
-  const archivedTeams = useQuery(
-    api.teams.getArchivedTeams,
-    userId ? { userId } : "skip"
-  );
-
-  const createTeamMutation = useMutation(api.teams.createTeam);
-  const updateTeamMutation = useMutation(api.teams.updateTeam);
-  const deleteTeamMutation = useMutation(api.teams.deleteTeam);
-  const restoreTeamMutation = useMutation(api.teams.restoreTeam);
-  const archiveTeamMutation = useMutation(api.teams.archiveTeam);
-
-  const createTeam = async (name: string, season: string) => {
-    if (!userId) {
-      throw new Error("User must be authenticated");
-    }
-    
-    return await createTeamMutation({
-      userId,
-      name,
-      season,
-    });
-  };
-
-  const updateTeam = async (teamId: Id<"teams">, updates: { name?: string; season?: string }) => {
-    if (!userId) {
-      throw new Error("User must be authenticated");
-    }
-    
-    return await updateTeamMutation({
-      teamId,
-      userId,
-      updates,
-    });
-  };
-
-  const deleteTeam = async (teamId: Id<"teams">) => {
-    if (!userId) {
-      throw new Error("User must be authenticated");
-    }
-    
-    return await deleteTeamMutation({
-      teamId,
-      userId,
-    });
-  };
-
-  const restoreTeam = async (teamId: Id<"teams">) => {
-    if (!userId) {
-      throw new Error("User must be authenticated");
-    }
-    
-    return await restoreTeamMutation({
-      teamId,
-      userId,
-    });
-  };
-
-  const archiveTeam = async (teamId: Id<"teams">, reason: string) => {
-    if (!userId) {
-      throw new Error("User must be authenticated");
-    }
-    
-    return await archiveTeamMutation({
-      teamId,
-      userId,
-      reason,
-    });
-  };
-
-  const exportTeamData = (teamId: Id<"teams">) => {
-    if (!userId) {
-      return null;
-    }
-    
-    // Return the query function that can be called by components
-    return useQuery(api.teams.exportTeamData, { teamId, userId });
-  };
+  const teams = useQuery(api.teams.getUserTeams, {});
+  const deletedTeams = useQuery(api.teams.getDeletedTeams, {});
+  const archivedTeams = useQuery(api.teams.getArchivedTeams, {});
+  
+  const createTeam = useMutation(api.teams.createTeam);
+  const updateTeam = useMutation(api.teams.updateTeam);
+  const deleteTeam = useMutation(api.teams.deleteTeam);
+  const restoreTeam = useMutation(api.teams.restoreTeam);
+  const archiveTeam = useMutation(api.teams.archiveTeam);
 
   return {
     teams,
     deletedTeams,
     archivedTeams,
-    createTeam,
-    updateTeam,
-    deleteTeam,
-    restoreTeam,
-    archiveTeam,
-    exportTeamData,
-    isLoading: teams === undefined && userId !== undefined,
+    createTeam: (name: string, season: string) => createTeam({ name, season }),
+    updateTeam: (teamId: Id<"teams">, updates: { name?: string; season?: string }) => updateTeam({ teamId, updates }),
+    deleteTeam: (teamId: Id<"teams">) => deleteTeam({ teamId }),
+    restoreTeam: (teamId: Id<"teams">) => restoreTeam({ teamId }),
+    archiveTeam: (teamId: Id<"teams">, reason: string) => archiveTeam({ teamId, reason }),
+    isLoading: teams === undefined,
   };
 }
