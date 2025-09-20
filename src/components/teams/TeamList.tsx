@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useTeams } from "@/hooks/useTeams";
 import { TeamForm } from "./TeamForm";
+import { TeamDetailView } from "./TeamDetailView";
 import { Id } from "../../../convex/_generated/dataModel";
 
 interface Team {
@@ -21,6 +22,7 @@ export function TeamList() {
   const { teams, deleteTeam, isLoading } = useTeams();
   const [deletingTeam, setDeletingTeam] = useState<Id<"teams"> | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
   const handleDeleteTeam = async (team: Team) => {
     try {
@@ -33,6 +35,16 @@ export function TeamList() {
       setDeletingTeam(null);
     }
   };
+
+  // If a team is selected, show the detail view
+  if (selectedTeam) {
+    return (
+      <TeamDetailView 
+        team={selectedTeam} 
+        onBack={() => setSelectedTeam(null)} 
+      />
+    );
+  }
 
   if (isLoading) {
     return (
@@ -142,7 +154,11 @@ export function TeamList() {
                 <Badge variant="secondary" className="text-xs">
                   Created {new Date(team._creationTime).toLocaleDateString()}
                 </Badge>
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSelectedTeam(team)}
+                >
                   <Users className="mr-1 h-3 w-3" />
                   Manage
                 </Button>
