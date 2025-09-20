@@ -23,9 +23,13 @@ export default defineSchema({
     season: v.string(), // Season identifier (e.g., "2025 Spring")
     isDeleted: v.optional(v.boolean()), // Soft delete flag
     deletedAt: v.optional(v.number()),  // Deletion timestamp
+    isArchived: v.optional(v.boolean()), // Archival flag (preserves data)
+    archivedAt: v.optional(v.number()),  // Archival timestamp
+    archivalReason: v.optional(v.string()), // Why archived (season ended, etc.)
   })
     .index("by_user", ["userId"])
     .index("by_user_active", ["userId", "isDeleted"]) // Active teams only
+    .index("by_user_archived", ["userId", "isArchived"]) // Archived teams
     .index("by_user_name_season", ["userId", "name", "season"]), // Unique constraint
 
   // Players - privacy-compliant player entities

@@ -1,10 +1,11 @@
-import React from 'react';
-import { Calendar, RotateCcw, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Calendar, RotateCcw, Archive, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { useTeams } from '../../hooks/useTeams';
 import { Id } from '../../../convex/_generated/dataModel';
+import ArchivalDialog from './ArchivalDialog';
 
 interface DeletedTeam {
   _id: Id<"teams">;
@@ -16,6 +17,12 @@ interface DeletedTeam {
 
 export function DeletedTeamsList() {
   const { deletedTeams, restoreTeam } = useTeams();
+  const [archivalTeam, setArchivalTeam] = useState<{
+    _id: Id<"teams">;
+    name: string;
+    season: string;
+  } | null>(null);
+  const [isArchivalDialogOpen, setIsArchivalDialogOpen] = useState(false);
 
   const handleRestoreTeam = async (teamId: Id<"teams">, teamName: string) => {
     try {
@@ -25,6 +32,20 @@ export function DeletedTeamsList() {
       console.error('Failed to restore team:', error);
       alert(`Failed to restore team: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  };
+
+  const handleArchiveTeam = (team: DeletedTeam) => {
+    setArchivalTeam({
+      _id: team._id,
+      name: team.name,
+      season: team.season
+    });
+    setIsArchivalDialogOpen(true);
+  };
+
+  const handleArchiveComplete = () => {
+    // Refresh the data by letting the query refetch
+    console.log('Team archived successfully');
   };
 
   const formatDate = (timestamp: number) => {
@@ -72,7 +93,7 @@ export function DeletedTeamsList() {
           Deleted Teams ({deletedTeams.length})
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Teams you've deleted. You can restore them or they'll be permanently removed after 30 days.
+          Teams you've deleted. You can restore them or archive them permanently with data preservation.
         </p>
       </CardHeader>
       <CardContent>
@@ -108,11 +129,11 @@ export function DeletedTeamsList() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="flex items-center gap-1 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                    disabled
+                    onClick={() => handleArchiveTeam(team)}
+                    className="flex items-center gap-1 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
                   >
-                    <Trash2 className="h-3 w-3" />
-                    Delete Forever
+                    <Archive className="h-3 w-3" />
+                    Archive
                   </Button>
                 </div>
               </CardContent>
@@ -120,6 +141,13 @@ export function DeletedTeamsList() {
           ))}
         </div>
       </CardContent>
+      
+      <ArchivalDialog
+        isOpen={isArchivalDialogOpen}
+        onOpenChange={setIsArchivalDialogOpen}
+        team={archivalTeam}
+        onArchiveComplete={handleArchiveComplete}
+      />
     </Card>
   );
 }

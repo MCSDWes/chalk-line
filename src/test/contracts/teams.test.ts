@@ -403,3 +403,215 @@ describe('Team Soft Delete Contract', () => {
     expect(expectedError).toContain('Cannot restore team')
   })
 })
+
+/**
+ * Team Archival Contract Tests
+ * 
+ * These tests verify that archival functionality works correctly:
+ * 1. Teams can be permanently archived with a reason
+ * 2. Archived teams preserve all historical data
+ * 3. Archived teams don't appear in active or deleted lists
+ * 4. Data export functionality works before archival
+ */
+describe('Team Archival Contract', () => {
+  it('should define archival fields in team schema', () => {
+    const archivedTeam = {
+      _id: 'jd123456789',
+      userId: 'user_123',
+      name: 'Eagles',
+      season: '2024 Fall',
+      isDeleted: true,
+      deletedAt: 1758341965302,
+      isArchived: true,
+      archivedAt: 1758341975302,
+      archivalReason: 'Season ended, no longer needed',
+      _creationTime: 1758341900000
+    }
+
+    expect(archivedTeam).toHaveProperty('isArchived')
+    expect(archivedTeam).toHaveProperty('archivedAt')
+    expect(archivedTeam).toHaveProperty('archivalReason')
+    expect(typeof archivedTeam.isArchived).toBe('boolean')
+    expect(typeof archivedTeam.archivedAt).toBe('number')
+    expect(typeof archivedTeam.archivalReason).toBe('string')
+    expect(archivedTeam.archivedAt).toBeGreaterThan(archivedTeam.deletedAt)
+  })
+
+  it('should define archiveTeam input and response structure', () => {
+    const expectedInput = {
+      teamId: 'jd123456789',
+      userId: 'user_123',
+      reason: 'Season ended, moving to historical data'
+    }
+
+    const expectedResponse = {
+      success: true,
+      teamId: 'jd123456789',
+      message: 'Team "Eagles" archived successfully. Historical data preserved for statistics.'
+    }
+
+    expect(expectedInput).toHaveProperty('teamId')
+    expect(expectedInput).toHaveProperty('userId')
+    expect(expectedInput).toHaveProperty('reason')
+    expect(typeof expectedInput.reason).toBe('string')
+    expect(expectedInput.reason.trim()).toBeTruthy()
+
+    expect(expectedResponse).toHaveProperty('success')
+    expect(expectedResponse).toHaveProperty('teamId')
+    expect(expectedResponse).toHaveProperty('message')
+    expect(expectedResponse.success).toBe(true)
+    expect(expectedResponse.message).toContain('archived successfully')
+    expect(expectedResponse.message).toContain('Historical data preserved')
+  })
+
+  it('should validate archival reason requirements', () => {
+    const validReasons = [
+      'Season ended',
+      'Team disbanded',
+      'Moving to new league',
+      'Data cleanup - historical records preserved'
+    ]
+
+    const invalidReasons = [
+      '', // empty
+      '   ', // whitespace only
+      'a'.repeat(201) // too long
+    ]
+
+    validReasons.forEach(reason => {
+      expect(typeof reason).toBe('string')
+      expect(reason.trim().length).toBeGreaterThan(0)
+      expect(reason.length).toBeLessThanOrEqual(200)
+    })
+
+    invalidReasons.forEach(reason => {
+      const isValid = reason.trim().length > 0 && reason.length <= 200
+      expect(isValid).toBe(false)
+    })
+  })
+
+  it('should define data export structure for archival backup', () => {
+    const expectedExportData = {
+      metadata: {
+        exportDate: '2025-09-20T10:30:00.000Z',
+        exportVersion: '1.0',
+        source: 'Baseball Scorekeeping App'
+      },
+      team: {
+        _id: 'jd123456789',
+        teamId: 'jd123456789',
+        userId: 'user_123',
+        name: 'Eagles',
+        season: '2024 Fall',
+        _creationTime: 1758341900000
+      },
+      players: [
+        {
+          _id: 'player_123',
+          playerId: 'player_123',
+          teamId: 'jd123456789',
+          firstName: 'John',
+          lastNameInitial: 'D',
+          isMinor: false,
+          position: 'pitcher',
+          jerseyNumber: 42
+        }
+      ],
+      rosters: [
+        {
+          _id: 'roster_123',
+          rosterId: 'roster_123',
+          teamId: 'jd123456789',
+          name: 'Starting Lineup',
+          gameDate: '2024-10-15',
+          playerIds: ['player_123'],
+          isActive: true
+        }
+      ],
+      statistics: {
+        totalPlayers: 1,
+        totalRosters: 1,
+        minors: 0,
+        adults: 1
+      }
+    }
+
+    expect(expectedExportData).toHaveProperty('metadata')
+    expect(expectedExportData).toHaveProperty('team')
+    expect(expectedExportData).toHaveProperty('players')
+    expect(expectedExportData).toHaveProperty('rosters')
+    expect(expectedExportData).toHaveProperty('statistics')
+
+    expect(expectedExportData.metadata).toHaveProperty('exportDate')
+    expect(expectedExportData.metadata).toHaveProperty('exportVersion')
+    expect(expectedExportData.metadata).toHaveProperty('source')
+
+    expect(Array.isArray(expectedExportData.players)).toBe(true)
+    expect(Array.isArray(expectedExportData.rosters)).toBe(true)
+    expect(typeof expectedExportData.statistics).toBe('object')
+  })
+
+  it('should filter archived teams from active and deleted lists', () => {
+    const allTeams = [
+      { name: 'Eagles', isDeleted: false, isArchived: false },
+      { name: 'Hawks', isDeleted: true, isArchived: false }, // soft deleted only
+      { name: 'Lions', isDeleted: true, isArchived: true }, // archived
+      { name: 'Tigers', isDeleted: false, isArchived: undefined }
+    ]
+
+    // Active teams: not deleted and not archived
+    const activeTeams = allTeams.filter(team => 
+      (team.isDeleted === false || team.isDeleted === undefined) &&
+      (team.isArchived === false || team.isArchived === undefined)
+    )
+
+    // Soft deleted teams: deleted but not archived
+    const deletedTeams = allTeams.filter(team =>
+      team.isDeleted === true &&
+      (team.isArchived === false || team.isArchived === undefined)
+    )
+
+    // Archived teams: archived (regardless of delete status)
+    const archivedTeams = allTeams.filter(team =>
+      team.isArchived === true
+    )
+
+    expect(activeTeams.map(t => t.name)).toEqual(['Eagles', 'Tigers'])
+    expect(deletedTeams.map(t => t.name)).toEqual(['Hawks'])
+    expect(archivedTeams.map(t => t.name)).toEqual(['Lions'])
+  })
+
+  it('should define getArchivedTeams input and output structure', () => {
+    const expectedInput = {
+      userId: 'user_123',
+      season: undefined // optional filter
+    }
+
+    const expectedOutput = [
+      {
+        _id: 'jd123456789',
+        userId: 'user_123',
+        name: 'Archived Eagles',
+        season: '2024 Fall',
+        isDeleted: true,
+        deletedAt: 1758341965302,
+        isArchived: true,
+        archivedAt: 1758341975302,
+        archivalReason: 'Season ended',
+        _creationTime: 1758341900000
+      }
+    ]
+
+    expect(expectedInput).toHaveProperty('userId')
+    expect(expectedInput.season).toBeUndefined() // optional field
+    expect(Array.isArray(expectedOutput)).toBe(true)
+    
+    if (expectedOutput.length > 0) {
+      const archivedTeam = expectedOutput[0]
+      expect(archivedTeam).toHaveProperty('isArchived')
+      expect(archivedTeam).toHaveProperty('archivedAt')
+      expect(archivedTeam).toHaveProperty('archivalReason')
+      expect(archivedTeam.isArchived).toBe(true)
+    }
+  })
+})

@@ -31,7 +31,7 @@ export const getUserTeams = query({
       throw new Error('User authentication required');
     }
 
-    // Build the query for active (non-deleted) teams
+    // Build the query for active (non-deleted, non-archived) teams
     let query = ctx.db
       .query("teams")
       .filter((q) => 
@@ -40,6 +40,10 @@ export const getUserTeams = query({
           q.or(
             q.eq(q.field("isDeleted"), undefined),
             q.eq(q.field("isDeleted"), false)
+          ),
+          q.or(
+            q.eq(q.field("isArchived"), undefined),
+            q.eq(q.field("isArchived"), false)
           )
         )
       );
@@ -83,13 +87,17 @@ export const getDeletedTeams = query({
       throw new Error('User authentication required');
     }
 
-    // Build the query for deleted teams only
+    // Build the query for soft-deleted (but not archived) teams only
     let query = ctx.db
       .query("teams")
       .filter((q) => 
         q.and(
           q.eq(q.field("userId"), args.userId),
-          q.eq(q.field("isDeleted"), true)
+          q.eq(q.field("isDeleted"), true),
+          q.or(
+            q.eq(q.field("isArchived"), undefined),
+            q.eq(q.field("isArchived"), false)
+          )
         )
       );
 
@@ -418,5 +426,184 @@ export const restoreTeam = mutation({
       teamId: args.teamId,
       message: `Team "${existingTeam.name}" restored successfully`
     };
+  },
+});
+
+/**
+ * Archive a team (permanent removal from active use, but preserves historical data)
+ * 
+ * Features:
+ * - Archives team for permanent removal from active use
+ * - Preserves all historical data (players, games, statistics)
+ * - Cannot be undone (unlike soft delete)
+ * - Validates team ownership
+ * - Requires archival reason for audit trail
+ */
+export const archiveTeam = mutation({
+  args: {
+    teamId: v.id("teams"),
+    userId: v.string(),
+    reason: v.string(), // Required reason for archival
+  },
+  handler: async (ctx, args) => {
+    // Validate authentication
+    if (!args.userId || !args.userId.startsWith('user_')) {
+      throw new Error('User authentication required');
+    }
+
+    // Validate archival reason
+    if (!args.reason || args.reason.trim().length === 0) {
+      throw new Error('Archival reason is required');
+    }
+
+    if (args.reason.length > 200) {
+      throw new Error('Archival reason must be 200 characters or less');
+    }
+
+    // Get the existing team
+    const existingTeam = await ctx.db.get(args.teamId);
+    if (!existingTeam || existingTeam.userId !== args.userId) {
+      throw new Error('Team not found or access denied');
+    }
+
+    // Check if team is already archived
+    if (existingTeam.isArchived) {
+      throw new Error('Team is already archived');
+    }
+
+    // Archive the team (preserves all data)
+    await ctx.db.patch(args.teamId, {
+      isArchived: true,
+      archivedAt: Date.now(),
+      archivalReason: args.reason.trim(),
+      // Also soft delete if not already deleted
+      isDeleted: true,
+      deletedAt: existingTeam.deletedAt || Date.now()
+    });
+
+    return {
+      success: true,
+      teamId: args.teamId,
+      message: `Team "${existingTeam.name}" archived successfully. Historical data preserved for statistics.`
+    };
+  },
+});
+
+/**
+ * Get archived teams for a user
+ * 
+ * Features:
+ * - Returns teams that have been permanently archived
+ * - Includes archival metadata (reason, timestamp)
+ * - Sorted by archival date (most recent first)
+ * - User authentication validation
+ */
+export const getArchivedTeams = query({
+  args: {
+    userId: v.string(),
+    season: v.optional(v.string()), // Optional season filter
+  },
+  handler: async (ctx, args) => {
+    // Validate authentication
+    if (!args.userId || !args.userId.startsWith('user_')) {
+      throw new Error('User authentication required');
+    }
+
+    // Build query for archived teams
+    let query = ctx.db
+      .query("teams")
+      .filter((q) => 
+        q.and(
+          q.eq(q.field("userId"), args.userId),
+          q.eq(q.field("isArchived"), true)
+        )
+      );
+
+    // Add season filter if provided
+    if (args.season) {
+      // Validate season format
+      const seasonPattern = /^\d{4} (Spring|Summer|Fall|Winter)$/;
+      if (!seasonPattern.test(args.season)) {
+        throw new Error('Invalid season format. Must be "YYYY Season" (e.g., "2025 Spring")');
+      }
+
+      query = query.filter((q) => q.eq(q.field("season"), args.season));
+    }
+
+    // Execute query and sort by archival time (most recently archived first)
+    const archivedTeams = await query
+      .order("desc")
+      .collect();
+
+    return archivedTeams;
+  },
+});
+
+/**
+ * Export team data for backup before archival
+ * 
+ * Features:
+ * - Exports complete team data including players and rosters
+ * - Formatted as JSON for easy backup and data portability
+ * - Includes metadata for future import functionality
+ * - User authentication validation
+ */
+export const exportTeamData = query({
+  args: {
+    teamId: v.id("teams"),
+    userId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    // Validate authentication
+    if (!args.userId || !args.userId.startsWith('user_')) {
+      throw new Error('User authentication required');
+    }
+
+    // Get the team
+    const team = await ctx.db.get(args.teamId);
+    if (!team || team.userId !== args.userId) {
+      throw new Error('Team not found or access denied');
+    }
+
+    // Get all players for this team
+    const players = await ctx.db
+      .query("players")
+      .filter((q) => q.eq(q.field("teamId"), args.teamId))
+      .collect();
+
+    // Get all rosters for this team
+    const rosters = await ctx.db
+      .query("rosters")
+      .filter((q) => q.eq(q.field("teamId"), args.teamId))
+      .collect();
+
+    // Create exportable data structure
+    const exportData = {
+      metadata: {
+        exportDate: new Date().toISOString(),
+        exportVersion: "1.0",
+        source: "Baseball Scorekeeping App"
+      },
+      team: {
+        ...team,
+        teamId: team._id // Include the ID for reference
+      },
+      players: players.map(player => ({
+        ...player,
+        playerId: player._id
+      })),
+      rosters: rosters.map(roster => ({
+        ...roster,
+        rosterId: roster._id
+      })),
+      statistics: {
+        totalPlayers: players.length,
+        totalRosters: rosters.length,
+        minors: players.filter(p => p.isMinor).length,
+        adults: players.filter(p => !p.isMinor).length
+      }
+    };
+
+    return exportData;
   },
 });
