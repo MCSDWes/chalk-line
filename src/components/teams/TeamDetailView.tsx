@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ArrowLeft, Users, Calendar, Settings } from "lucide-react";
+import { ArrowLeft, Users, Calendar, Settings, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PlayerManagement } from "./PlayerManagement";
+import { RosterManagement } from "./RosterManagement";
 import { Id } from "../../../convex/_generated/dataModel";
 
 interface Team {
@@ -20,7 +21,7 @@ interface TeamDetailViewProps {
 }
 
 export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
-  const [activeTab, setActiveTab] = useState<'players' | 'settings'>('players');
+  const [activeTab, setActiveTab] = useState<'players' | 'rosters' | 'settings'>('players');
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleDateString('en-US', {
@@ -76,6 +77,14 @@ export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
           Players
         </Button>
         <Button
+          variant={activeTab === 'rosters' ? 'default' : 'outline'}
+          onClick={() => setActiveTab('rosters')}
+          className="flex items-center gap-2"
+        >
+          <ClipboardList className="h-4 w-4" />
+          Rosters
+        </Button>
+        <Button
           variant={activeTab === 'settings' ? 'default' : 'outline'}
           onClick={() => setActiveTab('settings')}
           className="flex items-center gap-2"
@@ -88,6 +97,10 @@ export function TeamDetailView({ team, onBack }: TeamDetailViewProps) {
       {/* Tab Content */}
       {activeTab === 'players' && (
         <PlayerManagement teamId={team._id} teamName={team.name} />
+      )}
+
+      {activeTab === 'rosters' && (
+        <RosterManagement teamId={team._id} teamName={team.name} />
       )}
 
       {activeTab === 'settings' && (
