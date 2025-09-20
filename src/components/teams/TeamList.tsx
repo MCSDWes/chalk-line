@@ -18,11 +18,20 @@ interface Team {
   season: string;
 }
 
-export function TeamList() {
+interface TeamListProps {
+  selectedTeam?: Team | null;
+  onTeamSelect?: (team: Team | null) => void;
+}
+
+export function TeamList({ selectedTeam, onTeamSelect }: TeamListProps) {
   const { teams, deleteTeam, isLoading } = useTeams();
   const [deletingTeam, setDeletingTeam] = useState<Id<"teams"> | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  
+  // Use internal state if no external state is provided (for backwards compatibility)
+  const [internalSelectedTeam, setInternalSelectedTeam] = useState<Team | null>(null);
+  const currentSelectedTeam = selectedTeam !== undefined ? selectedTeam : internalSelectedTeam;
+  const setSelectedTeam = onTeamSelect || setInternalSelectedTeam;
 
   const handleDeleteTeam = async (team: Team) => {
     try {
@@ -37,10 +46,10 @@ export function TeamList() {
   };
 
   // If a team is selected, show the detail view
-  if (selectedTeam) {
+  if (currentSelectedTeam) {
     return (
       <TeamDetailView 
-        team={selectedTeam} 
+        team={currentSelectedTeam} 
         onBack={() => setSelectedTeam(null)} 
       />
     );

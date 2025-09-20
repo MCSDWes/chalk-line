@@ -1,9 +1,20 @@
+import { useState } from 'react';
 import { TeamList } from './TeamList';
 import { DeletedTeamsList } from './DeletedTeamsList';
 import { useAuth } from '../../hooks/useAuth';
+import { Id } from '../../../convex/_generated/dataModel';
+
+interface Team {
+  _id: Id<"teams">;
+  _creationTime: number;
+  userId: string;
+  name: string;
+  season: string;
+}
 
 export function TeamsTest() {
   const { user } = useAuth();
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
 
   if (!user) {
     return (
@@ -18,8 +29,12 @@ export function TeamsTest() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      <TeamList />
-      <DeletedTeamsList />
+      <TeamList 
+        selectedTeam={selectedTeam}
+        onTeamSelect={setSelectedTeam}
+      />
+      {/* Only show deleted teams when not viewing a specific team */}
+      {!selectedTeam && <DeletedTeamsList />}
     </div>
   );
 }
