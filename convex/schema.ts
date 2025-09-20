@@ -25,27 +25,29 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_name_season", ["userId", "name", "season"]), // Unique constraint
 
-  // Players - global entities with privacy-compliant names
+  // Players - privacy-compliant player entities
   players: defineTable({
-    firstName: v.string(),        // First name only (privacy compliance)
-    lastNameInitial: v.string(),  // Single letter last name initial (A-Z)
-  })
-    .index("by_firstName", ["firstName"])
-    .index("by_firstName_initial", ["firstName", "lastNameInitial"]),
-
-  // PlayerTeamRoster - junction table linking players to teams
-  playerTeamRoster: defineTable({
-    playerId: v.id("players"),
-    teamId: v.id("teams"),
-    jerseyNumber: v.number(),              // Unique within team (1-99)
-    primaryPosition: Position,
-    secondaryPositions: v.array(Position), // Additional positions player can play
-    isActive: v.boolean(),                 // Current roster status
-    joinedAt: v.number(),                  // Timestamp when player joined team
-    leftAt: v.optional(v.number()),        // Timestamp when player left team
+    teamId: v.id("teams"),            // Team the player belongs to
+    firstName: v.string(),            // First name only (privacy compliance)
+    lastNameInitial: v.string(),      // Single letter last name initial (A-Z)
+    lastName: v.optional(v.string()),  // Full last name for adults only
+    isMinor: v.boolean(),             // COPPA compliance flag
+    position: v.string(),             // Player position (pitcher, catcher, etc.)
+    jerseyNumber: v.optional(v.number()), // Jersey number (0-99, null for coaches)
   })
     .index("by_team", ["teamId"])
-    .index("by_player", ["playerId"])
-    .index("by_team_active", ["teamId", "isActive"])
-    .index("by_team_jersey", ["teamId", "jerseyNumber", "isActive"]), // Jersey uniqueness
+    .index("by_team_jersey", ["teamId", "jerseyNumber"]) // Jersey uniqueness
+    .index("by_firstName_initial", ["firstName", "lastNameInitial"]),
+
+  // Rosters - game-specific player groupings
+  rosters: defineTable({
+    teamId: v.id("teams"),
+    name: v.string(),                 // Roster name (e.g., "Starting Lineup")
+    gameDate: v.string(),             // Game date (YYYY-MM-DD format)
+    playerIds: v.array(v.id("players")), // Array of player IDs
+    isActive: v.boolean(),            // Current active status
+  })
+    .index("by_team", ["teamId"])
+    .index("by_team_date", ["teamId", "gameDate"])
+    .index("by_team_active", ["teamId", "isActive"]),
 });

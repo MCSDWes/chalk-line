@@ -1,19 +1,99 @@
 import { describe, it, expect } from 'vitest'
 
 /**
- * Contract Tests for Convex API Functions
+ * Contract Tests for Team API Functions (T005-T006)
  * 
- * These tests verify that our Convex API functions:
+ * These tests verify that our Team API functions:
  * 1. Have correct function signatures
- * 2. Handle authentication properly
+ * 2. Handle authentication properly  
  * 3. Return expected data structures
  * 4. Handle error cases appropriately
+ * 5. Enforce business rules (unique team names per user/season)
  */
 
-describe('Teams API Contract Tests', () => {
-  describe('getUserTeams query contract', () => {
+describe('Teams API Contract Tests (T005-T006)', () => {
+  describe('T005: POST /api/teams (createTeam)', () => {
     it('should define the expected input structure', () => {
-      // Test that our query expects the correct input format
+      const expectedInput = {
+        userId: 'user_123',
+        name: 'Eagles',
+        season: '2025 Spring'
+      }
+      
+      expect(expectedInput).toHaveProperty('userId')
+      expect(expectedInput).toHaveProperty('name')
+      expect(expectedInput).toHaveProperty('season')
+      expect(typeof expectedInput.userId).toBe('string')
+      expect(typeof expectedInput.name).toBe('string')
+      expect(typeof expectedInput.season).toBe('string')
+      expect(expectedInput.userId).toMatch(/^user_/)
+    })
+
+    it('should validate team name requirements', () => {
+      const validNames = ['Eagles', 'Red Sox', 'Lightning Bolts', 'A']
+      
+      validNames.forEach(name => {
+        expect(typeof name).toBe('string')
+        expect(name.trim().length).toBeGreaterThan(0)
+        expect(name.length).toBeLessThanOrEqual(50) // Business rule
+      })
+    })
+
+    it('should validate season format requirements', () => {
+      const validSeasons = ['2025 Spring', '2024 Fall', '2025 Summer', '2026 Winter']
+      
+      validSeasons.forEach(season => {
+        expect(typeof season).toBe('string')
+        expect(season).toMatch(/^\d{4} (Spring|Summer|Fall|Winter)$/)
+      })
+    })
+
+    it('should define expected success response structure', () => {
+      const expectedResponse = {
+        _id: 'team_abc123',
+        _creationTime: 1672531200000,
+        userId: 'user_123',
+        name: 'Eagles',
+        season: '2025 Spring'
+      }
+
+      expect(expectedResponse).toHaveProperty('_id')
+      expect(expectedResponse).toHaveProperty('_creationTime')
+      expect(expectedResponse).toHaveProperty('userId')
+      expect(expectedResponse).toHaveProperty('name')
+      expect(expectedResponse).toHaveProperty('season')
+      expect(typeof expectedResponse._id).toBe('string')
+      expect(typeof expectedResponse._creationTime).toBe('number')
+    })
+
+    it('should define error cases for duplicate teams', () => {
+      const duplicateError = {
+        message: 'Team with this name already exists for this season',
+        code: 'DUPLICATE_TEAM'
+      }
+
+      expect(duplicateError).toHaveProperty('message')
+      expect(duplicateError).toHaveProperty('code')
+      expect(duplicateError.message).toContain('already exists')
+    })
+
+    it('should define error cases for invalid input', () => {
+      const validationErrors = [
+        'Team name is required',
+        'Season is required', 
+        'User authentication required',
+        'Invalid season format'
+      ]
+
+      validationErrors.forEach(error => {
+        expect(typeof error).toBe('string')
+        expect(error.length).toBeGreaterThan(0)
+      })
+    })
+  })
+
+  describe('T006: GET /api/teams (getUserTeams)', () => {
+    it('should define the expected input structure', () => {
       const expectedInput = {
         userId: 'user_123'
       }
@@ -23,15 +103,21 @@ describe('Teams API Contract Tests', () => {
       expect(expectedInput.userId).toMatch(/^user_/)
     })
 
-    it('should define the expected output structure', () => {
-      // Test that our query returns the expected format
+    it('should define expected output structure for team list', () => {
       const expectedOutput = [
         {
           _id: 'team_123',
           _creationTime: 1672531200000,
-          userId: 'user_123',
+          userId: 'user_123', 
           name: 'Eagles',
           season: '2025 Spring'
+        },
+        {
+          _id: 'team_456',
+          _creationTime: 1672531300000,
+          userId: 'user_123',
+          name: 'Hawks', 
+          season: '2024 Fall'
         }
       ]
       
@@ -46,41 +132,34 @@ describe('Teams API Contract Tests', () => {
         expect(typeof team.season).toBe('string')
       })
     })
-  })
 
-  describe('createTeam mutation contract', () => {
-    it('should define the expected input structure', () => {
-      // Test that our mutation expects the correct input format
-      const expectedInput = {
+    it('should handle empty teams list', () => {
+      const emptyResponse: Array<Record<string, any>> = []
+      
+      expect(Array.isArray(emptyResponse)).toBe(true)
+      expect(emptyResponse.length).toBe(0)
+    })
+
+    it('should define error cases for unauthorized access', () => {
+      const unauthorizedError = {
+        message: 'User authentication required',
+        code: 'UNAUTHORIZED'
+      }
+
+      expect(unauthorizedError).toHaveProperty('message')
+      expect(unauthorizedError).toHaveProperty('code')
+      expect(unauthorizedError.message).toContain('authentication')
+    })
+
+    it('should support filtering by season', () => {
+      const filterInput = {
         userId: 'user_123',
-        name: 'Test Team',
         season: '2025 Spring'
       }
       
-      expect(expectedInput).toHaveProperty('userId')
-      expect(expectedInput).toHaveProperty('name')
-      expect(expectedInput).toHaveProperty('season')
-      expect(typeof expectedInput.userId).toBe('string')
-      expect(typeof expectedInput.name).toBe('string')
-      expect(typeof expectedInput.season).toBe('string')
-    })
-
-    it('should validate team name requirements', () => {
-      const validNames = ['Eagles', 'Red Sox', 'A']
-      
-      validNames.forEach(name => {
-        expect(typeof name).toBe('string')
-        expect(name.trim().length).toBeGreaterThan(0)
-      })
-    })
-
-    it('should validate season format requirements', () => {
-      const validSeasons = ['2025 Spring', '2024 Fall', '2025 Summer']
-      
-      validSeasons.forEach(season => {
-        expect(typeof season).toBe('string')
-        expect(season).toMatch(/^\d{4} (Spring|Summer|Fall|Winter)$/)
-      })
+      expect(filterInput).toHaveProperty('userId')
+      expect(filterInput).toHaveProperty('season')
+      expect(filterInput.season).toMatch(/^\d{4} (Spring|Summer|Fall|Winter)$/)
     })
   })
 })

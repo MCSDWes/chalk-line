@@ -14,17 +14,24 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.2.7",
-    "@hookform/resolvers": "^3.3.4",
+    "@hookform/resolvers": "^3.10.0",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
     "@tanstack/react-query": "^5.50.1",
     "@tanstack/react-router": "^1.45.13",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "convex": "^1.13.2",
     "convex-helpers": "^0.1.104",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.427.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-hook-form": "^7.52.1",
-    "zod": "^3.23.8"
+    "react-hook-form": "^7.63.0",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.8.0",

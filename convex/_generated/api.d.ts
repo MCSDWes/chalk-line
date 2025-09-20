@@ -14,6 +14,8 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as http from "../http.js";
+import type * as players from "../players.js";
+import type * as rosters from "../rosters.js";
 import type * as teams from "../teams.js";
 import type * as test from "../test.js";
 
@@ -27,6 +29,8 @@ import type * as test from "../test.js";
  */
 declare const fullApi: ApiFromModules<{
   http: typeof http;
+  players: typeof players;
+  rosters: typeof rosters;
   teams: typeof teams;
   test: typeof test;
 }>;
