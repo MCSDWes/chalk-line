@@ -70,8 +70,8 @@ export default defineSchema({
   // Games - individual baseball games
   games: defineTable({
     userId: v.string(),               // Clerk user ID (game creator/scorekeeper)
-    homeTeamId: v.id("teams"),        // Home team
-    homeTeamName: v.optional(v.string()), // Home team name (for UI display) - temporarily optional for migration
+    homeTeamId: v.optional(v.id("teams")), // Home team (optional for external home teams)
+    homeTeamName: v.optional(v.string()), // Home team name (for UI display)
     awayTeamId: v.optional(v.id("teams")), // Away team (optional for external teams)
     awayTeamName: v.optional(v.string()), // Name for external teams
     gameDate: v.string(),             // Game date (YYYY-MM-DD)
@@ -165,7 +165,16 @@ export default defineSchema({
     currentBatter: v.optional(v.id("players")), // Current batter
     battingOrder: v.array(v.id("players")), // Home team batting order
     awayBattingOrder: v.optional(v.array(v.string())), // Away team batting order (player names for external teams)
+    awayTeamPlayers: v.optional(v.array(v.object({ // External team player details
+      playerName: v.string(),
+      jerseyNumber: v.optional(v.number()),
+      battingPosition: v.number(),
+      fieldPosition: v.string(),
+    }))),
     currentBatterIndex: v.number(),    // Index in batting order
+    currentInning: v.number(),         // Current inning (1, 2, 3, etc.)
+    isTopInning: v.boolean(),          // true = top of inning (away team batting), false = bottom (home team batting)
+    homeTeamBatting: v.boolean(),      // Which team is currently batting
     baseRunners: v.object({           // Current base runners
       first: v.optional(v.id("players")),
       second: v.optional(v.id("players")),

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
-import { ArrowLeft, Plus, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Save, X } from 'lucide-react';
 
 // Baseball field positions
 const FIELD_POSITIONS = [
@@ -22,6 +22,7 @@ const FIELD_POSITIONS = [
 
 interface ExternalTeamPlayer {
   playerName: string;
+  jerseyNumber?: number;
   battingPosition: number;
   fieldPosition: string;
 }
@@ -30,18 +31,40 @@ interface ExternalTeamLineupFormProps {
   awayTeamName: string;
   onSubmit: (lineup: ExternalTeamPlayer[]) => void;
   onCancel: () => void;
+  existingLineup?: ExternalTeamPlayer[];
+  mode?: 'edit' | 'start-game'; // 'edit' for saving, 'start-game' for game start
 }
 
 export function ExternalTeamLineupForm({ 
   awayTeamName, 
   onSubmit, 
-  onCancel 
+  onCancel,
+  existingLineup,
+  mode = 'start-game'
 }: ExternalTeamLineupFormProps) {
-  const [lineup, setLineup] = useState<ExternalTeamPlayer[]>([
-    { playerName: '', battingPosition: 1, fieldPosition: '' },
-  ]);
+  const [lineup, setLineup] = useState<ExternalTeamPlayer[]>(
+    existingLineup && existingLineup.length > 0 
+      ? existingLineup 
+      : [{ playerName: '', jerseyNumber: undefined, battingPosition: 1, fieldPosition: '' }]
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+
+  // Quick fill with standard lineup
+  const quickFillStandardLineup = () => {
+    const standardLineup: ExternalTeamPlayer[] = [
+      { playerName: '', jerseyNumber: undefined, battingPosition: 1, fieldPosition: 'CF' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 2, fieldPosition: '2B' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 3, fieldPosition: '1B' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 4, fieldPosition: 'LF' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 5, fieldPosition: '3B' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 6, fieldPosition: 'RF' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 7, fieldPosition: 'C' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 8, fieldPosition: 'SS' },
+      { playerName: '', jerseyNumber: undefined, battingPosition: 9, fieldPosition: 'P' },
+    ];
+    setLineup(standardLineup);
+  };
 
   const addPlayer = () => {
     if (lineup.length < 15) { // Max 15 players (9 starters + 6 bench)
@@ -49,6 +72,7 @@ export function ExternalTeamLineupForm({
         ...lineup,
         { 
           playerName: '', 
+          jerseyNumber: undefined,
           battingPosition: lineup.length + 1, 
           fieldPosition: '' 
         }
@@ -68,10 +92,32 @@ export function ExternalTeamLineupForm({
     }
   };
 
-  const updatePlayer = (index: number, field: keyof ExternalTeamPlayer, value: string | number) => {
+  const updatePlayer = (index: number, field: keyof ExternalTeamPlayer, value: string | number | undefined) => {
     const newLineup = [...lineup];
     newLineup[index] = { ...newLineup[index], [field]: value };
     setLineup(newLineup);
+  };
+
+  const movePlayerUp = (index: number) => {
+    if (index > 0) {
+      const newLineup = [...lineup];
+      [newLineup[index - 1], newLineup[index]] = [newLineup[index], newLineup[index - 1]];
+      // Update batting positions
+      newLineup[index - 1].battingPosition = index;
+      newLineup[index].battingPosition = index + 1;
+      setLineup(newLineup);
+    }
+  };
+
+  const movePlayerDown = (index: number) => {
+    if (index < lineup.length - 1) {
+      const newLineup = [...lineup];
+      [newLineup[index], newLineup[index + 1]] = [newLineup[index + 1], newLineup[index]];
+      // Update batting positions
+      newLineup[index].battingPosition = index + 1;
+      newLineup[index + 1].battingPosition = index + 2;
+      setLineup(newLineup);
+    }
   };
 
   const validateLineup = (): string[] => {
@@ -156,8 +202,10 @@ export function ExternalTeamLineupForm({
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="font-medium text-blue-800 mb-2">📋 Instructions</h4>
             <ul className="text-sm text-blue-700 space-y-1">
+              <li>• Enter player names, jersey numbers, and field positions</li>
+              <li>• Click "Quick Fill Standard Lineup" to set up positions automatically</li>
+              <li>• Use ↑↓ arrows next to batting order number to reorder players</li>
               <li>• Enter at least 9 players for the starting lineup</li>
-              <li>• Assign field positions for the defensive lineup</li>
               <li>• Batting order determines the sequence of at-bats</li>
               <li>• You can add substitute players (positions 10-15)</li>
             </ul>
@@ -184,66 +232,117 @@ export function ExternalTeamLineupForm({
       {/* Lineup Form */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            {awayTeamName} Batting Order & Field Positions
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              {awayTeamName} Batting Order & Field Positions
+            </CardTitle>
+            <Button
+              onClick={quickFillStandardLineup}
+              variant="outline"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700"
+            >
+              Quick Fill Standard Lineup
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {lineup.map((player, index) => (
-              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 border rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Badge variant={index < 9 ? "default" : "secondary"} className="w-8 h-8 flex items-center justify-center">
-                    {index + 1}
-                  </Badge>
-                  <Label className="text-sm font-medium">
-                    {index < 9 ? 'Starter' : 'Substitute'}
-                  </Label>
-                </div>
-                
-                <div>
-                  <Label htmlFor={`player-${index}`}>Player Name</Label>
-                  <Input
-                    id={`player-${index}`}
-                    value={player.playerName}
-                    onChange={(e) => updatePlayer(index, 'playerName', e.target.value)}
-                    placeholder="Enter player name"
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor={`position-${index}`}>Field Position</Label>
-                  <select
-                    id={`position-${index}`}
-                    value={player.fieldPosition}
-                    onChange={(e) => updatePlayer(index, 'fieldPosition', e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select position</option>
-                    {FIELD_POSITIONS.map((pos) => (
-                      <option key={pos.value} value={pos.value}>
-                        {pos.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-end">
-                  {lineup.length > 1 && (
-                    <Button
-                      onClick={() => removePlayer(index)}
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+          <div className="space-y-3">
+            {lineup.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Users className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                <p>No players in lineup yet</p>
+                <p className="text-sm">Click "Quick Fill Standard Lineup" to set up positions automatically</p>
               </div>
-            ))}
+            ) : (
+              lineup.map((player, index) => (
+                <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="min-w-[2rem]">
+                      {index + 1}
+                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Button
+                        onClick={() => movePlayerUp(index)}
+                        disabled={index === 0}
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                      >
+                        ↑
+                      </Button>
+                      <Button
+                        onClick={() => movePlayerDown(index)}
+                        disabled={index === lineup.length - 1}
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                      >
+                        ↓
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <Label htmlFor={`player-${index}`} className="text-sm">Player Name</Label>
+                      <Input
+                        id={`player-${index}`}
+                        value={player.playerName}
+                        onChange={(e) => updatePlayer(index, 'playerName', e.target.value)}
+                        placeholder="Enter player name"
+                        className="text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor={`jersey-${index}`} className="text-sm">Jersey #</Label>
+                      <Input
+                        id={`jersey-${index}`}
+                        type="number"
+                        min="0"
+                        max="99"
+                        value={player.jerseyNumber || ''}
+                        onChange={(e) => updatePlayer(index, 'jerseyNumber', e.target.value ? Number(e.target.value) : undefined)}
+                        placeholder="#"
+                        className="text-sm"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor={`position-${index}`} className="text-sm">Field Position</Label>
+                      <select
+                        id={`position-${index}`}
+                        value={player.fieldPosition}
+                        onChange={(e) => updatePlayer(index, 'fieldPosition', e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                      >
+                        <option value="">Select position</option>
+                        {FIELD_POSITIONS.map((pos) => (
+                          <option key={pos.value} value={pos.value}>
+                            {pos.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center">
+                    {lineup.length > 1 && (
+                      <Button
+                        onClick={() => removePlayer(index)}
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
 
             {/* Add Player Button */}
             {lineup.length < 15 && (
@@ -256,24 +355,31 @@ export function ExternalTeamLineupForm({
                 Add Player {lineup.length < 9 ? `(${9 - lineup.length} more needed)` : '(Substitute)'}
               </Button>
             )}
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Submit Actions */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4 justify-end">
-            <Button onClick={onCancel} variant="outline">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              {isSubmitting ? 'Starting Game...' : 'Start Game'}
-            </Button>
+            {/* Submit Actions - moved inside the main card */}
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex gap-4 justify-end">
+                <Button onClick={onCancel} variant="outline">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className={mode === 'edit' ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}
+                >
+                  {isSubmitting ? (
+                    mode === 'edit' ? 'Saving...' : 'Starting Game...'
+                  ) : (
+                    mode === 'edit' ? (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Lineup
+                      </>
+                    ) : 'Start Game'
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

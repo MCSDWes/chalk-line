@@ -128,10 +128,8 @@ export const setGameLineup = mutation({
       throw new Error("Not authorized to modify this team");
     }
 
-    // Validate that game hasn't started yet
-    if (game.status !== "scheduled") {
-      throw new Error("Cannot modify lineup after game has started");
-    }
+    // Note: Allow lineup modifications during games for tactical changes
+    // Removed restriction: if (game.status !== "scheduled")
 
     // Validate batting order
     if (args.battingOrder.length === 0) {

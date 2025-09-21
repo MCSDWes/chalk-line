@@ -3,8 +3,10 @@ import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
 
 export interface CreateGameParams {
-  homeTeamId: Id<"teams">;
-  awayTeamName: string;
+  homeTeamId?: Id<"teams">;
+  awayTeamId?: Id<"teams">;
+  homeTeamName?: string;
+  awayTeamName?: string;
   gameDate: string;
   gameTime?: string;
   field?: string;
@@ -16,6 +18,17 @@ export interface StartGameParams {
   gameId: Id<"games">;
   awayTeamLineup?: Array<{
     playerName: string;
+    jerseyNumber?: number;
+    battingPosition: number;
+    fieldPosition: string;
+  }>;
+}
+
+export interface UpdateExternalTeamLineupParams {
+  gameId: Id<"games">;
+  externalTeamLineup: Array<{
+    playerName: string;
+    jerseyNumber?: number;
     battingPosition: number;
     fieldPosition: string;
   }>;
@@ -48,6 +61,11 @@ export interface CompleteGameParams {
   gameId: Id<"games">;
 }
 
+export interface EnsureInningExistsParams {
+  gameId: Id<"games">;
+  inningNumber: number;
+}
+
 export interface RecordAtBatParams {
   gameId: Id<"games">;
   playerId: Id<"players">;
@@ -70,7 +88,12 @@ export function useGames() {
   const recordAtBatMutation = useMutation(api.games.recordAtBat);
   const updateInningScoreMutation = useMutation(api.games.updateInningScore);
   const nextInningMutation = useMutation(api.games.nextInning);
+  const ensureInningExistsMutation = useMutation(api.games.ensureInningExists);
   const migrateGamesMutation = useMutation(api.games.migrateGamesWithHomeTeamName);
+  const updateExternalTeamLineupMutation = useMutation(api.games.updateExternalTeamLineup);
+  const updatePitchCountMutation = useMutation(api.games.updatePitchCount);
+  const updateBaseRunnersMutation = useMutation(api.games.updateBaseRunners);
+  const advanceInningMutation = useMutation(api.games.advanceInning);
 
   // Wrapper functions
   const createGame = async (params: CreateGameParams) => {
@@ -97,8 +120,41 @@ export function useGames() {
     return await nextInningMutation(params);
   };
 
+  const ensureInningExists = async (params: EnsureInningExistsParams) => {
+    return await ensureInningExistsMutation(params);
+  };
+
   const migrateGamesWithHomeTeamName = async () => {
     return await migrateGamesMutation({});
+  };
+
+  const updateExternalTeamLineup = async (params: UpdateExternalTeamLineupParams) => {
+    return await updateExternalTeamLineupMutation(params);
+  };
+
+  const updatePitchCount = async (params: {
+    gameId: Id<"games">;
+    balls: number;
+    strikes: number;
+    outs: number;
+    currentBatterIndex?: number;
+  }) => {
+    return await updatePitchCountMutation(params);
+  };
+
+  const updateBaseRunners = async (params: {
+    gameId: Id<"games">;
+    baseRunners: {
+      first?: Id<"players">;
+      second?: Id<"players">;
+      third?: Id<"players">;
+    };
+  }) => {
+    return await updateBaseRunnersMutation(params);
+  };
+
+  const advanceInning = async (params: { gameId: Id<"games"> }) => {
+    return await advanceInningMutation(params);
   };
 
   return {
@@ -115,6 +171,11 @@ export function useGames() {
     recordAtBat,
     updateInningScore,
     nextInning,
+    ensureInningExists,
     migrateGamesWithHomeTeamName,
+    updateExternalTeamLineup,
+    updatePitchCount,
+    updateBaseRunners,
+    advanceInning,
   };
 }

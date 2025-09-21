@@ -72,7 +72,7 @@ export const getGame = query({
     }
 
     // Get related data
-    const homeTeam = await ctx.db.get(game.homeTeamId);
+    const homeTeam = game.homeTeamId ? await ctx.db.get(game.homeTeamId) : null;
     const awayTeam = game.awayTeamId ? await ctx.db.get(game.awayTeamId) : null;
     
     const innings = await ctx.db
@@ -101,8 +101,9 @@ export const getGame = query({
  */
 export const createGame = mutation({
   args: {
-    homeTeamId: v.id("teams"),
+    homeTeamId: v.optional(v.id("teams")),
     awayTeamId: v.optional(v.id("teams")),
+    homeTeamName: v.optional(v.string()),
     awayTeamName: v.optional(v.string()),
     gameDate: v.string(),
     gameTime: v.optional(v.string()),
@@ -123,27 +124,30 @@ export const createGame = mutation({
     }
     const userId = identity.subject;
 
-    // Validate home team ownership
-    const homeTeam = await ctx.db.get(args.homeTeamId);
-    if (!homeTeam) {
-      throw new Error("Home team not found");
-    }
-    if (homeTeam.userId !== userId) {
-      throw new Error("Not authorized to create game for this team");
+    // Validate that at least one team is specified and owned by user
+    if (!args.homeTeamId && !args.awayTeamId) {
+      throw new Error("At least one team must be selected");
     }
 
-    // Validate away team if provided
-    if (args.awayTeamId) {
-      const awayTeam = await ctx.db.get(args.awayTeamId);
-      if (!awayTeam) {
-        throw new Error("Away team not found");
+    // Validate team ownership for user's team
+    const userTeamId = args.homeTeamId || args.awayTeamId;
+    let userTeam = null;
+    if (userTeamId) {
+      userTeam = await ctx.db.get(userTeamId);
+      if (!userTeam) {
+        throw new Error("Team not found");
       }
-      // Away team can belong to different user (opponent)
+      if (userTeam.userId !== userId) {
+        throw new Error("Not authorized to use this team");
+      }
     }
 
-    // Validate that either awayTeamId or awayTeamName is provided
-    if (!args.awayTeamId && !args.awayTeamName) {
-      throw new Error("Either away team or away team name must be provided");
+    // Validate that opponent team info is provided
+    if (args.homeTeamId && !args.awayTeamId && !args.awayTeamName) {
+      throw new Error("Away team name must be provided");
+    }
+    if (args.awayTeamId && !args.homeTeamId && !args.homeTeamName) {
+      throw new Error("Home team name must be provided");
     }
 
     // Validate game date format (YYYY-MM-DD)
@@ -152,13 +156,24 @@ export const createGame = mutation({
       throw new Error("Game date must be in YYYY-MM-DD format");
     }
 
+    // Determine team names for display
+    let homeTeamName = args.homeTeamName;
+    let awayTeamName = args.awayTeamName;
+    
+    if (args.homeTeamId && userTeam && args.homeTeamId === userTeam._id) {
+      homeTeamName = userTeam.name;
+    }
+    if (args.awayTeamId && userTeam && args.awayTeamId === userTeam._id) {
+      awayTeamName = userTeam.name;
+    }
+
     // Create the game
     const gameId = await ctx.db.insert("games", {
       userId,
       homeTeamId: args.homeTeamId,
-      homeTeamName: homeTeam.name, // Add the home team name
-      awayTeamId: args.awayTeamId || undefined,
-      awayTeamName: args.awayTeamName,
+      homeTeamName,
+      awayTeamId: args.awayTeamId,
+      awayTeamName,
       gameDate: args.gameDate,
       gameTime: args.gameTime,
       field: args.field,
@@ -179,6 +194,7 @@ export const startGame = mutation({
     gameId: v.id("games"),
     awayTeamLineup: v.optional(v.array(v.object({
       playerName: v.string(),
+      jerseyNumber: v.optional(v.number()),
       battingPosition: v.number(),
       fieldPosition: v.string(),
     }))),
@@ -240,32 +256,66 @@ export const startGame = mutation({
       startedAt: Date.now(),
     });
 
-    // Prepare away team batting order
+    // Prepare away team batting order and player details
     let awayBattingOrder: string[] | undefined = undefined;
+    let awayTeamPlayers: any[] | undefined = undefined;
     
     if (args.awayTeamLineup && args.awayTeamLineup.length > 0) {
-      // For external teams, we store player names instead of IDs
-      awayBattingOrder = args.awayTeamLineup
-        .sort((a, b) => a.battingPosition - b.battingPosition)
-        .map(player => player.playerName);
+      // Sort by batting position
+      const sortedLineup = args.awayTeamLineup.sort((a, b) => a.battingPosition - b.battingPosition);
+      
+      // For external teams, we store player names for batting order
+      awayBattingOrder = sortedLineup.map(player => player.playerName);
+      
+      // Store complete player details for scorekeeping
+      awayTeamPlayers = sortedLineup;
     }
 
-    // Initialize game state
-    await ctx.db.insert("gameState", {
-      gameId: args.gameId,
-      battingOrder: homeBattingOrder,
-      awayBattingOrder: awayBattingOrder,
-      currentBatterIndex: 0,
-      baseRunners: {
-        first: undefined,
-        second: undefined,
-        third: undefined,
-      },
-      outs: 0,
-      balls: 0,
-      strikes: 0,
-      lastUpdated: Date.now(),
-    });
+    // Check if game state already exists (might have been created when saving external lineup)
+    const existingGameState = await ctx.db
+      .query("gameState")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .first();
+
+    if (existingGameState) {
+      // Update existing game state with game start data
+      await ctx.db.patch(existingGameState._id, {
+        battingOrder: homeBattingOrder,
+        awayBattingOrder: awayBattingOrder,
+        awayTeamPlayers: awayTeamPlayers,
+        currentBatterIndex: 0,
+        baseRunners: {
+          first: undefined,
+          second: undefined,
+          third: undefined,
+        },
+        outs: 0,
+        balls: 0,
+        strikes: 0,
+        lastUpdated: Date.now(),
+      });
+    } else {
+      // Initialize new game state
+      await ctx.db.insert("gameState", {
+        gameId: args.gameId,
+        battingOrder: homeBattingOrder,
+        awayBattingOrder: awayBattingOrder,
+        awayTeamPlayers: awayTeamPlayers,
+        currentBatterIndex: 0,
+        currentInning: 1,
+        isTopInning: true,
+        homeTeamBatting: false, // Away team bats first (top of 1st)
+        baseRunners: {
+          first: undefined,
+          second: undefined,
+          third: undefined,
+        },
+        outs: 0,
+        balls: 0,
+        strikes: 0,
+        lastUpdated: Date.now(),
+      });
+    }
 
     // Initialize first inning
     await ctx.db.insert("innings", {
@@ -742,6 +792,58 @@ export const nextInning = mutation({
 });
 
 /**
+ * Ensure an inning record exists (create if missing)
+ */
+export const ensureInningExists = mutation({
+  args: {
+    gameId: v.id("games"),
+    inningNumber: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required");
+    }
+    const userId = identity.subject;
+
+    // Validate game ownership
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.userId !== userId) {
+      throw new Error("Not authorized to update this game");
+    }
+
+    // Check if inning already exists
+    const existingInning = await ctx.db
+      .query("innings")
+      .withIndex("by_game_inning", (q) =>
+        q.eq("gameId", args.gameId).eq("inningNumber", args.inningNumber)
+      )
+      .first();
+
+    if (!existingInning) {
+      // Create new inning record
+      const inningId = await ctx.db.insert("innings", {
+        gameId: args.gameId,
+        inningNumber: args.inningNumber,
+        homeRuns: 0,
+        awayRuns: 0,
+        homeHits: 0,
+        awayHits: 0,
+        homeErrors: 0,
+        awayErrors: 0,
+        isComplete: false,
+      });
+      return { created: true, inningId };
+    }
+
+    return { created: false, inningId: existingInning._id };
+  },
+});
+
+/**
  * Migration function to populate missing homeTeamName fields
  * This fixes games created before the homeTeamName field was added to the schema
  */
@@ -764,7 +866,7 @@ export const migrateGamesWithHomeTeamName = mutation({
     
     for (const game of games) {
       // Check if homeTeamName is missing or empty
-      if (!game.homeTeamName) {
+      if (!game.homeTeamName && game.homeTeamId) {
         // Get the home team data
         const homeTeam = await ctx.db.get(game.homeTeamId);
         if (homeTeam) {
@@ -778,5 +880,270 @@ export const migrateGamesWithHomeTeamName = mutation({
     }
 
     return { message: `Updated ${updatedCount} games with home team names` };
+  },
+});
+
+/**
+ * Update external team lineup
+ */
+export const updateExternalTeamLineup = mutation({
+  args: {
+    gameId: v.id("games"),
+    externalTeamLineup: v.array(v.object({
+      playerName: v.string(),
+      jerseyNumber: v.optional(v.number()),
+      battingPosition: v.number(),
+      fieldPosition: v.string(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required");
+    }
+    const userId = identity.subject;
+
+    // Validate game ownership
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.userId !== userId) {
+      throw new Error("Not authorized to update this game");
+    }
+
+    // Note: Allow external lineup modifications during games for tactical changes
+    // Removed restriction: if (game.status !== "scheduled")
+
+    // Get the current game state, or create one if it doesn't exist
+    let gameState = await ctx.db
+      .query("gameState")
+      .withIndex("by_game", (q) => q.eq("gameId", args.gameId))
+      .first();
+
+    if (!gameState) {
+      // Create initial game state for this game
+      const gameStateId = await ctx.db.insert("gameState", {
+        gameId: args.gameId,
+        battingOrder: [], // Will be set when game starts
+        awayBattingOrder: [],
+        awayTeamPlayers: [],
+        currentBatterIndex: 0,
+        currentInning: 1,
+        isTopInning: true,
+        homeTeamBatting: false, // Away team bats first
+        baseRunners: {
+          first: undefined,
+          second: undefined,
+          third: undefined,
+        },
+        outs: 0,
+        balls: 0,
+        strikes: 0,
+        lastUpdated: Date.now(),
+      });
+      
+      gameState = await ctx.db.get(gameStateId);
+      if (!gameState) {
+        throw new Error("Failed to create game state");
+      }
+    }
+
+    // Sort lineup by batting position
+    const sortedLineup = args.externalTeamLineup.sort((a, b) => a.battingPosition - b.battingPosition);
+    
+    // Update batting order and player details
+    const awayBattingOrder = sortedLineup.map(player => player.playerName);
+
+    // Update the game state
+    await ctx.db.patch(gameState._id, {
+      awayBattingOrder: awayBattingOrder,
+      awayTeamPlayers: sortedLineup,
+      lastUpdated: Date.now(),
+    });
+
+    return args.gameId;
+  },
+});
+
+/**
+ * Update pitch count (balls, strikes, outs) during at-bat
+ */
+export const updatePitchCount = mutation({
+  args: {
+    gameId: v.id("games"),
+    balls: v.number(),
+    strikes: v.number(),
+    outs: v.number(),
+    currentBatterIndex: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required");
+    }
+    const userId = identity.subject;
+
+    // Validate game ownership
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.userId !== userId) {
+      throw new Error("Not authorized to update this game");
+    }
+
+    if (game.status !== "in_progress") {
+      throw new Error("Game is not in progress");
+    }
+
+    // Get current game state
+    const gameState = await ctx.db
+      .query("gameState")
+      .filter((q) => q.eq(q.field("gameId"), args.gameId))
+      .first();
+
+    if (!gameState) {
+      throw new Error("Game state not found");
+    }
+
+    // Update the game state with new count
+    await ctx.db.patch(gameState._id, {
+      balls: args.balls,
+      strikes: args.strikes,
+      outs: args.outs,
+      currentBatterIndex: args.currentBatterIndex !== undefined 
+        ? args.currentBatterIndex 
+        : gameState.currentBatterIndex,
+      lastUpdated: Date.now(),
+    });
+
+    return args.gameId;
+  },
+});
+
+/**
+ * Update base runners during play
+ */
+export const updateBaseRunners = mutation({
+  args: {
+    gameId: v.id("games"),
+    baseRunners: v.object({
+      first: v.optional(v.id("players")),
+      second: v.optional(v.id("players")),
+      third: v.optional(v.id("players"))
+    }),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required");
+    }
+    const userId = identity.subject;
+
+    // Validate game ownership
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.userId !== userId) {
+      throw new Error("Not authorized to update this game");
+    }
+
+    if (game.status !== "in_progress") {
+      throw new Error("Game is not in progress");
+    }
+
+    // Get current game state
+    const gameState = await ctx.db
+      .query("gameState")
+      .filter((q) => q.eq(q.field("gameId"), args.gameId))
+      .first();
+
+    if (!gameState) {
+      throw new Error("Game state not found");
+    }
+
+    // Update base runners
+    await ctx.db.patch(gameState._id, {
+      baseRunners: args.baseRunners,
+      lastUpdated: Date.now(),
+    });
+
+    return args.gameId;
+  },
+});
+
+/**
+ * Advance to the next half-inning (switches batting teams)
+ */
+export const advanceInning = mutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required");
+    }
+    const userId = identity.subject;
+
+    // Validate game ownership
+    const game = await ctx.db.get(args.gameId);
+    if (!game) {
+      throw new Error("Game not found");
+    }
+    if (game.userId !== userId) {
+      throw new Error("Not authorized to update this game");
+    }
+
+    if (game.status !== "in_progress") {
+      throw new Error("Game is not in progress");
+    }
+
+    // Get current game state
+    const gameState = await ctx.db
+      .query("gameState")
+      .filter((q) => q.eq(q.field("gameId"), args.gameId))
+      .first();
+
+    if (!gameState) {
+      throw new Error("Game state not found");
+    }
+
+    // Determine next inning state
+    let nextInning = gameState.currentInning || 1;
+    let nextIsTopInning = gameState.isTopInning ?? true;
+    let nextHomeTeamBatting = gameState.homeTeamBatting ?? false;
+
+    if (nextIsTopInning) {
+      // Currently top of inning (away team batting), switch to bottom (home team batting)
+      nextIsTopInning = false;
+      nextHomeTeamBatting = true;
+    } else {
+      // Currently bottom of inning (home team batting), advance to next inning top
+      nextInning += 1;
+      nextIsTopInning = true;
+      nextHomeTeamBatting = false;
+    }
+
+    // Reset game state for new inning/half-inning
+    await ctx.db.patch(gameState._id, {
+      currentInning: nextInning,
+      isTopInning: nextIsTopInning,
+      homeTeamBatting: nextHomeTeamBatting,
+      currentBatterIndex: 0, // Reset to first batter
+      outs: 0, // Reset outs
+      balls: 0, // Reset count
+      strikes: 0,
+      baseRunners: { // Clear bases
+        first: undefined,
+        second: undefined,
+        third: undefined
+      },
+      lastUpdated: Date.now(),
+    });
+
+    return args.gameId;
   },
 });

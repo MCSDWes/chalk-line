@@ -5,10 +5,11 @@ import { useTeams } from '../../hooks/useTeams';
 import { useGames } from '../../hooks/useGames';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Play, CheckCircle } from 'lucide-react';
 import { GameForm } from './GameForm';
 import { GameList } from './GameList';
 import { LiveGame } from './LiveGame';
-import { LineupManager } from './LineupManager';
+import { LineupManager } from './LineupManager.tsx';
 import { ExternalTeamLineupForm } from './ExternalTeamLineupForm';
 
 export function GameManagement() {
@@ -47,9 +48,14 @@ export function GameManagement() {
     setActiveTab('list');
   };
 
-  const handleStartGame = async (gameId: string) => {
-    // First go to lineup setup phase
+  const handleSetupLineups = async (gameId: string) => {
     setSelectedGameId(gameId);
+    
+    // Check if lineups are ready before deciding the action
+    const game = games?.find(g => g._id === gameId);
+    if (!game) return;
+    
+    // Go to lineup setup phase
     setActiveTab('lineup');
   };
 
@@ -95,6 +101,19 @@ export function GameManagement() {
     console.log('Delete game:', gameId);
   };
 
+  const handleStartGameFromList = async (gameId: string) => {
+    try {
+      await startGame({
+        gameId: gameId as any
+      });
+      
+      setSelectedGameId(gameId);
+      setActiveTab('live');
+    } catch (error) {
+      console.error('Failed to start game:', error);
+    }
+  };
+
   const handleBackToList = () => {
     setSelectedGameId(null);
     setActiveTab('list');
@@ -117,6 +136,38 @@ export function GameManagement() {
     selectedGameId ? { gameId: selectedGameId as any } : "skip"
   );
   const currentGame = currentGameData?.game;
+
+  // Get lineups for current game to check readiness
+  const userTeamId = currentGame?.homeTeamId || currentGame?.awayTeamId;
+  const userLineup = useQuery(
+    api.lineups.getGameLineup,
+    selectedGameId && userTeamId ? { gameId: selectedGameId as any, teamId: userTeamId } : "skip"
+  );
+
+  // Check if both lineups are ready
+  const isGameReady = () => {
+    if (!currentGameData?.gameState || !userLineup) return false;
+    
+    const userLineupReady = userLineup.players && userLineup.players.length >= 9;
+    const externalLineupReady = currentGameData.gameState.awayTeamPlayers && 
+                                currentGameData.gameState.awayTeamPlayers.length >= 9;
+    
+    return userLineupReady && externalLineupReady;
+  };
+
+  const handleStartGameDirect = async () => {
+    if (!selectedGameId || !currentGameData?.gameState?.awayTeamPlayers) return;
+    
+    try {
+      await startGame({
+        gameId: selectedGameId as any,
+        awayTeamLineup: currentGameData.gameState.awayTeamPlayers,
+      });
+      setActiveTab('live');
+    } catch (error) {
+      console.error('Failed to start game:', error);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -148,7 +199,8 @@ export function GameManagement() {
       {activeTab === 'list' && (
         <GameList
           games={games || []}
-          onStartGame={handleStartGame}
+          onStartGame={handleStartGameFromList}
+          onSetupLineups={handleSetupLineups}
           onViewGame={handleViewGame}
           onDeleteGame={handleDeleteGame}
           isLoading={!games}
@@ -164,15 +216,42 @@ export function GameManagement() {
       )}
 
       {activeTab === 'lineup' && selectedGameId && currentGame && (
-        <LineupManager
-          game={currentGame}
-          onLineupsReady={handleLineupsReady}
-        />
+        <div className="space-y-4">
+          {isGameReady() && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <span className="text-lg font-medium">Both lineups are ready!</span>
+                  </div>
+                  <Button 
+                    onClick={handleStartGameDirect}
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Game
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          <LineupManager
+            game={currentGame}
+            onLineupsReady={handleLineupsReady}
+          />
+        </div>
       )}
 
       {activeTab === 'external-lineup' && selectedGameId && currentGame && (
         <ExternalTeamLineupForm
-          awayTeamName={currentGame.awayTeamName || 'Away Team'}
+          awayTeamName={
+            // If user is home team, opponent is away team
+            currentGame.homeTeamId 
+              ? (currentGame.awayTeamName || 'Away Team')
+              : (currentGame.homeTeamName || 'Home Team')
+          }
           onSubmit={handleExternalLineupSubmit}
           onCancel={handleExternalLineupCancel}
         />

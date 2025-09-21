@@ -24,10 +24,9 @@ export function GameForm({ teams, onGameCreated, onCancel }: GameFormProps) {
   const [error, setError] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
-    homeTeamId: '',
-    awayTeamType: 'external' as 'internal' | 'external',
-    awayTeamId: '',
-    awayTeamName: '',
+    myTeamId: '',
+    myTeamRole: 'home' as 'home' | 'away',
+    opponentTeamName: '',
     gameDate: new Date().toISOString().split('T')[0], // Today's date
     gameTime: '',
     field: '',
@@ -41,17 +40,25 @@ export function GameForm({ teams, onGameCreated, onCancel }: GameFormProps) {
     setIsSubmitting(true);
 
     try {
-      if (!formData.homeTeamId) {
-        throw new Error('Please select a home team');
+      if (!formData.myTeamId) {
+        throw new Error('Please select your team');
       }
       
-      if (!formData.awayTeamName.trim()) {
+      if (!formData.opponentTeamName.trim()) {
         throw new Error('Please enter the opposing team name');
       }
 
+      // Set home and away teams based on user selection
+      const homeTeamId = formData.myTeamRole === 'home' ? formData.myTeamId : undefined;
+      const awayTeamId = formData.myTeamRole === 'away' ? formData.myTeamId : undefined;
+      const homeTeamName = formData.myTeamRole === 'home' ? undefined : formData.opponentTeamName.trim();
+      const awayTeamName = formData.myTeamRole === 'away' ? undefined : formData.opponentTeamName.trim();
+
       await createGame({
-        homeTeamId: formData.homeTeamId as any,
-        awayTeamName: formData.awayTeamName.trim(),
+        homeTeamId: homeTeamId as any,
+        awayTeamId: awayTeamId as any,
+        homeTeamName: homeTeamName,
+        awayTeamName: awayTeamName,
         gameDate: formData.gameDate,
         gameTime: formData.gameTime || undefined,
         field: formData.field || undefined,
@@ -89,15 +96,15 @@ export function GameForm({ teams, onGameCreated, onCancel }: GameFormProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="homeTeam">Home Team</Label>
+              <Label htmlFor="myTeam">Your Team</Label>
               <select
-                id="homeTeam"
-                value={formData.homeTeamId}
-                onChange={(e) => handleInputChange('homeTeamId', e.target.value)}
+                id="myTeam"
+                value={formData.myTeamId}
+                onChange={(e) => handleInputChange('myTeamId', e.target.value)}
                 className="w-full p-2 border border-gray-300 rounded-md"
                 required
               >
-                <option value="">Select home team</option>
+                <option value="">Select your team</option>
                 {teams.map((team) => (
                   <option key={team._id} value={team._id}>
                     {team.name} ({team.season})
@@ -107,12 +114,26 @@ export function GameForm({ teams, onGameCreated, onCancel }: GameFormProps) {
             </div>
 
             <div>
-              <Label htmlFor="awayTeam">Opposing Team</Label>
+              <Label htmlFor="teamRole">Your Team Role</Label>
+              <select
+                id="teamRole"
+                value={formData.myTeamRole}
+                onChange={(e) => handleInputChange('myTeamRole', e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md"
+                required
+              >
+                <option value="home">Home Team</option>
+                <option value="away">Away Team (Visiting)</option>
+              </select>
+            </div>
+
+            <div>
+              <Label htmlFor="opponentTeam">Opposing Team</Label>
               <Input
-                id="awayTeam"
+                id="opponentTeam"
                 type="text"
-                value={formData.awayTeamName}
-                onChange={(e) => handleInputChange('awayTeamName', e.target.value)}
+                value={formData.opponentTeamName}
+                onChange={(e) => handleInputChange('opponentTeamName', e.target.value)}
                 placeholder="Enter opposing team name"
                 required
               />

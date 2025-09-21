@@ -1,29 +1,36 @@
 import { useState } from 'react';
+import { useQuery } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { Play } from 'lucide-react';
 
 interface Game {
   _id: string;
-  homeTeamId: string;
-  homeTeamName: string;
-  awayTeamName: string;
+  _creationTime: number;
+  homeTeamId?: string;
+  homeTeamName?: string;
+  awayTeamId?: string;
+  awayTeamName?: string;
   gameDate: string;
   gameTime?: string;
   field?: string;
   season: string;
   gameType: 'regular' | 'playoff' | 'championship' | 'scrimmage' | 'tournament';
-  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'suspended' | 'cancelled';
   homeScore?: number;
   awayScore?: number;
   currentInning?: number;
-  inningHalf?: 'top' | 'bottom';
-  createdAt: string;
+  currentHalf?: 'top' | 'bottom';
+  startedAt?: number;
+  completedAt?: number;
 }
 
 interface GameListProps {
   games: Game[];
   onStartGame: (gameId: string) => void;
+  onSetupLineups: (gameId: string) => void;
   onViewGame: (gameId: string) => void;
   onDeleteGame: (gameId: string) => void;
   isLoading?: boolean;
@@ -31,7 +38,8 @@ interface GameListProps {
 
 export function GameList({ 
   games, 
-  onStartGame, 
+  onStartGame,
+  onSetupLineups, 
   onViewGame, 
   onDeleteGame, 
   isLoading = false 
@@ -45,6 +53,58 @@ export function GameList({
   const filteredGames = selectedSeason === 'all' 
     ? games 
     : games.filter(game => game.season === selectedSeason);
+
+  // Helper component to check if a game is ready to start
+  function GameActionButton({ game }: { game: Game }) {
+    // Check if user has a team in this game
+    const userTeamId = game.homeTeamId || game.awayTeamId;
+    
+    // Get lineup data for the user's team
+    const userLineup = useQuery(
+      api.lineups.getGameLineup,
+      userTeamId ? { gameId: game._id as any, teamId: userTeamId as any } : "skip"
+    );
+    
+    // Get game state to check external lineup
+    const gameData = useQuery(
+      api.games.getGame,
+      { gameId: game._id as any }
+    );
+    
+    if (game.status !== 'scheduled') {
+      return null; // Other buttons will be handled outside this component
+    }
+
+    // Check if both lineups are ready
+    const userLineupReady = userLineup?.players && userLineup.players.length >= 9;
+    const externalLineupReady = gameData?.gameState?.awayTeamPlayers && 
+                                gameData.gameState.awayTeamPlayers.length >= 9;
+    
+    const bothLineupsReady = userLineupReady && externalLineupReady;
+
+    if (bothLineupsReady) {
+      return (
+        <Button
+          onClick={() => onStartGame(game._id)}
+          size="sm"
+          className="bg-green-600 hover:bg-green-700"
+        >
+          <Play className="w-3 h-3 mr-1" />
+          Start Game
+        </Button>
+      );
+    } else {
+      return (
+        <Button
+          onClick={() => onSetupLineups(game._id)}
+          size="sm"
+          className="bg-orange-600 hover:bg-orange-700"
+        >
+          Set Lineups
+        </Button>
+      );
+    }
+  }
 
   // Sort games by date (most recent first)
   const sortedGames = [...filteredGames].sort((a, b) => 
@@ -74,6 +134,7 @@ export function GameList({
       scheduled: 'bg-blue-100 text-blue-800',
       in_progress: 'bg-green-100 text-green-800',
       completed: 'bg-gray-100 text-gray-800',
+      suspended: 'bg-yellow-100 text-yellow-800',
       cancelled: 'bg-red-100 text-red-800'
     };
 
@@ -81,6 +142,7 @@ export function GameList({
       scheduled: 'Scheduled',
       in_progress: 'In Progress',
       completed: 'Completed',
+      suspended: 'Suspended',
       cancelled: 'Cancelled'
     };
 
@@ -190,7 +252,7 @@ export function GameList({
                         </div>
                         {game.status === 'in_progress' && game.currentInning && (
                           <div className="text-xs text-gray-600">
-                            {game.inningHalf === 'top' ? 'Top' : 'Bottom'} of inning {game.currentInning}
+                            {game.currentHalf === 'top' ? 'Top' : 'Bottom'} of inning {game.currentInning}
                           </div>
                         )}
                       </div>
@@ -200,13 +262,7 @@ export function GameList({
                   {/* Action Buttons */}
                   <div className="flex space-x-2 ml-4">
                     {game.status === 'scheduled' && (
-                      <Button
-                        onClick={() => onStartGame(game._id)}
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        Start Game
-                      </Button>
+                      <GameActionButton game={game} />
                     )}
                     
                     {game.status === 'in_progress' && (
